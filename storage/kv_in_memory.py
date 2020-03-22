@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from typing import Tuple, Iterable
 
 from rlp.utils import str_to_bytes
@@ -12,7 +13,8 @@ databases = {}
 
 class KeyValueStorageInMemory(KeyValueStorage):
     def __init__(self):
-        self._dict = {}
+        # TODO: Most probably this will need to be replaced by SortedDict
+        self._dict = OrderedDict()
 
     def get(self, key):
         if isinstance(key, str):
@@ -62,6 +64,8 @@ class KeyValueStorageInMemory(KeyValueStorage):
                              "should be true")
 
         def filter(key, start, end):
+            if not isinstance(key, str):
+                key = int(key.decode())
             if start and end:
                 return key in range(start, end)
             if start:
@@ -71,7 +75,11 @@ class KeyValueStorageInMemory(KeyValueStorage):
 
         if include_key and include_value:
             if start or end:
-                return {k: v for k, v in self._dict.items() if filter(k, start, end)}
+                filtered_dct = OrderedDict()
+                for k, v in self._dict.items():
+                    if filter(k, start, end):
+                        filtered_dct[k] = v
+                return filtered_dct.items()
             return self._dict.items()
         if include_key:
             if start or end:
@@ -82,6 +90,7 @@ class KeyValueStorageInMemory(KeyValueStorage):
                 return (v for k, v in self._dict.items() if filter(k, start, end))
             return self._dict.values()
 
+    @property
     def closed(self):
         return False
 

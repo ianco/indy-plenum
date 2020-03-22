@@ -8,7 +8,8 @@ from plenum.common.constants import TXN_TIME, TXN_TYPE, TARGET_NYM, ROLE, \
     TXN_SIGNATURE_FROM, TXN_SIGNATURE_VALUE, TXN_SIGNATURE_VALUES, TXN_PAYLOAD_DATA, TXN_PAYLOAD_METADATA_REQ_ID, \
     TXN_PAYLOAD_METADATA_FROM, TXN_PAYLOAD_PROTOCOL_VERSION, TXN_PAYLOAD_TYPE, TXN_METADATA_SEQ_NO, TXN_METADATA_TIME, \
     TXN_METADATA_ID, TXN_VERSION, TXN_PAYLOAD_METADATA_DIGEST, TXN_ID, CURRENT_PROTOCOL_VERSION, \
-    TXN_PAYLOAD_METADATA_PAYLOAD_DIGEST, TXN_PAYLOAD_METADATA_TAA_ACCEPTANCE
+    TXN_PAYLOAD_METADATA_PAYLOAD_DIGEST, TXN_PAYLOAD_METADATA_TAA_ACCEPTANCE, TXN_PAYLOAD_METADATA_ENDORSER, \
+    CURRENT_TXN_PAYLOAD_VERSIONS, TXN_PAYLOAD_VERSION, CURRENT_TXN_VERSION, OP_VER
 from plenum.common.request import Request
 from plenum.common.types import f, OPERATION
 from stp_core.common.log import getlogger
@@ -121,6 +122,10 @@ def get_from(txn):
     return txn[TXN_PAYLOAD][TXN_PAYLOAD_METADATA].get(TXN_PAYLOAD_METADATA_FROM, None)
 
 
+def get_endorser(txn):
+    return txn[TXN_PAYLOAD][TXN_PAYLOAD_METADATA].get(TXN_PAYLOAD_METADATA_ENDORSER, None)
+
+
 def get_req_id(txn):
     return txn[TXN_PAYLOAD][TXN_PAYLOAD_METADATA].get(TXN_PAYLOAD_METADATA_REQ_ID, None)
 
@@ -164,6 +169,10 @@ def get_protocol_version(txn):
     return txn[TXN_PAYLOAD].get(TXN_PAYLOAD_PROTOCOL_VERSION, None)
 
 
+def get_payload_txn_version(txn):
+    return txn[TXN_PAYLOAD].get(TXN_PAYLOAD_VERSION, None)
+
+
 def is_forced(txn):
     force = get_payload_data(txn).get(FORCE, None)
     if force is None:
@@ -171,12 +180,12 @@ def is_forced(txn):
     return str(force) == 'True'
 
 
-def init_empty_txn(txn_type, protocol_version=CURRENT_PROTOCOL_VERSION):
+def init_empty_txn(txn_type, protocol_version=CURRENT_PROTOCOL_VERSION, txn_payload_version=None):
     result = {}
     result[TXN_PAYLOAD] = {}
     result[TXN_METADATA] = {}
     result[TXN_SIGNATURE] = {}
-    result[TXN_VERSION] = "1"
+    result[TXN_VERSION] = CURRENT_TXN_VERSION
 
     set_type(result, txn_type)
     result[TXN_PAYLOAD][TXN_PAYLOAD_DATA] = {}
@@ -184,6 +193,10 @@ def init_empty_txn(txn_type, protocol_version=CURRENT_PROTOCOL_VERSION):
         result[TXN_PAYLOAD][TXN_PAYLOAD_PROTOCOL_VERSION] = protocol_version
 
     result[TXN_PAYLOAD][TXN_PAYLOAD_METADATA] = {}
+    if txn_payload_version is not None:
+        result[TXN_PAYLOAD][TXN_PAYLOAD_VERSION] = txn_payload_version
+    elif CURRENT_TXN_PAYLOAD_VERSIONS[txn_type] and int(CURRENT_TXN_PAYLOAD_VERSIONS[txn_type]) > 1:
+        result[TXN_PAYLOAD][TXN_PAYLOAD_VERSION] = CURRENT_TXN_PAYLOAD_VERSIONS[txn_type]
     # result[TXN_PAYLOAD][TXN_PAYLOAD_METADATA][TXN_PAYLOAD_METADATA_FROM] = None
     # result[TXN_PAYLOAD][TXN_PAYLOAD_METADATA][TXN_PAYLOAD_METADATA_REQ_ID] = None
 
@@ -200,7 +213,7 @@ def set_payload_data(txn, data):
 
 
 def append_payload_metadata(
-        txn, frm=None, req_id=None, digest=None, payload_digest=None, taa_acceptance=None):
+        txn, frm=None, req_id=None, digest=None, payload_digest=None, taa_acceptance=None, endorser=None):
     if frm is not None:
         txn[TXN_PAYLOAD][TXN_PAYLOAD_METADATA][TXN_PAYLOAD_METADATA_FROM] = frm
     if req_id is not None:
@@ -211,6 +224,8 @@ def append_payload_metadata(
         txn[TXN_PAYLOAD][TXN_PAYLOAD_METADATA][TXN_PAYLOAD_METADATA_DIGEST] = digest
     if payload_digest is not None:
         txn[TXN_PAYLOAD][TXN_PAYLOAD_METADATA][TXN_PAYLOAD_METADATA_PAYLOAD_DIGEST] = payload_digest
+    if endorser is not None:
+        txn[TXN_PAYLOAD][TXN_PAYLOAD_METADATA][TXN_PAYLOAD_METADATA_ENDORSER] = endorser
     return txn
 
 
@@ -241,7 +256,8 @@ def reqToTxn(req):
             signature=req.get(f.SIG.nm, None),
             signatures=req.get(f.SIGS.nm, None),
             protocolVersion=req.get(f.PROTOCOL_VERSION.nm, None),
-            taaAcceptance=req.get(f.TAA_ACCEPTANCE.nm, None)
+            taaAcceptance=req.get(f.TAA_ACCEPTANCE.nm, None),
+            endorser=req.get(f.ENDORSER.nm, None)
         )
         req = TxnUtilConfig.client_request_class(**kwargs)
     if isinstance(req, Request):
@@ -273,7 +289,8 @@ def transform_to_new_format(txn, seq_no):
 def do_req_to_txn(req_data, req_op):
     # 1. init new txn
     result = init_empty_txn(txn_type=req_op.pop(TXN_TYPE, None),
-                            protocol_version=req_data.pop(f.PROTOCOL_VERSION.nm, None))
+                            protocol_version=req_data.pop(f.PROTOCOL_VERSION.nm, None),
+                            txn_payload_version=req_op.pop(OP_VER, None))
 
     # 2. Fill Signature
     if (f.SIG.nm in req_data) or (f.SIGS.nm in req_data):
@@ -291,7 +308,8 @@ def do_req_to_txn(req_data, req_op):
                             req_id=req_data.pop(f.REQ_ID.nm, None),
                             digest=req_data.pop(f.DIGEST.nm, None),
                             payload_digest=req_data.pop(f.PAYLOAD_DIGEST.nm, None),
-                            taa_acceptance=req_data.pop(f.TAA_ACCEPTANCE.nm, None))
+                            taa_acceptance=req_data.pop(f.TAA_ACCEPTANCE.nm, None),
+                            endorser=req_data.pop(f.ENDORSER.nm, None))
 
     # 4. Fill Payload data
     set_payload_data(result, req_op)

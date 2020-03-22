@@ -13,7 +13,7 @@ from common.serializers.json_serializer import JsonSerializer
 
 from plenum.common.constants import REPLY, TXN_AUTHOR_AGREEMENT_TEXT, TXN_AUTHOR_AGREEMENT_VERSION, TXN_METADATA, \
     TXN_METADATA_TIME, TXN_METADATA_SEQ_NO, CONFIG_LEDGER_ID, AML_VERSION, AML, AML_CONTEXT, TXN_TYPE, \
-    GET_TXN_AUTHOR_AGREEMENT_AML, CURRENT_PROTOCOL_VERSION
+    GET_TXN_AUTHOR_AGREEMENT_AML, CURRENT_PROTOCOL_VERSION, TXN_AUTHOR_AGREEMENT_RETIREMENT_TS, TXN_AUTHOR_AGREEMENT_DIGEST
 from plenum.common.util import randomString
 from plenum.test.delayers import req_delay
 from plenum.test.helper import sdk_get_and_check_replies
@@ -46,7 +46,7 @@ def nodeSetWithTaaAlwaysResponding(txnPoolNodeSet, looper, sdk_pool_handle,
     global TIMESTAMP_V1, TIMESTAMP_V2
 
     # Force signing empty config state
-    txnPoolNodeSet[0].master_replica._do_send_3pc_batch(ledger_id=CONFIG_LEDGER_ID)
+    txnPoolNodeSet[0].master_replica._ordering_service._do_send_3pc_batch(ledger_id=CONFIG_LEDGER_ID)
 
     looper.runFor(3)  # Make sure we have long enough gap between updates
     reply = send_aml_request(looper, sdk_wallet_trustee, sdk_pool_handle, version=V1, aml=json.dumps(AML1),
@@ -71,12 +71,16 @@ def nodeSetWithTaa(request, nodeSetWithTaaAlwaysResponding):
             yield nodeSetWithTaaAlwaysResponding
 
 
-def taa_value(result, text, version):
-    return JsonSerializer().serialize({
-        "val": {
+def taa_value(result, text, version, digest, retired=False):
+    value = {
             TXN_AUTHOR_AGREEMENT_TEXT: text,
-            TXN_AUTHOR_AGREEMENT_VERSION: version
-        },
+            TXN_AUTHOR_AGREEMENT_VERSION: version,
+            TXN_AUTHOR_AGREEMENT_DIGEST: digest
+        }
+    if retired:
+        value[TXN_AUTHOR_AGREEMENT_RETIREMENT_TS] = retired
+    return JsonSerializer().serialize({
+        "val": value,
         "lsn": result[TXN_METADATA_SEQ_NO],
         "lut": result[TXN_METADATA_TIME]
     })

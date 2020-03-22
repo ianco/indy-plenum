@@ -1,10 +1,10 @@
 # inter-node communication
+from collections import defaultdict
 from enum import IntEnum, unique
 
 from plenum.common.plenum_protocol_version import PlenumProtocolVersion
 from plenum.common.roles import Roles
 from plenum.common.transactions import PlenumTransactions
-from plenum.common.util import UniqueSet
 
 NOMINATE = "NOMINATE"
 REELECTION = "REELECTION"
@@ -22,6 +22,8 @@ POOL_LEDGER_TXNS = "POOL_LEDGER_TXNS"
 PROPAGATE = "PROPAGATE"
 
 PREPREPARE = "PREPREPARE"
+OLD_VIEW_PREPREPARE_REQ = "OLD_VIEW_PREPREPARE_REQ"
+OLD_VIEW_PREPREPARE_REP = "OLD_VIEW_PREPREPARE_REP"
 PREPARE = "PREPARE"
 COMMIT = "COMMIT"
 CHECKPOINT = "CHECKPOINT"
@@ -73,6 +75,7 @@ PORT = "port"
 KEYS = "keys"
 TYPE = "type"
 TXN_TYPE = "type"
+OP_VER = "ver"
 TXN_ID = "txnId"
 ORIGIN = "origin"
 # Use f.IDENTIFIER.nm
@@ -118,7 +121,8 @@ AUDIT_TXN_LEDGERS_SIZE = "ledgerSize"
 AUDIT_TXN_LEDGER_ROOT = "ledgerRoot"
 AUDIT_TXN_STATE_ROOT = "stateRoot"
 AUDIT_TXN_PRIMARIES = "primaries"
-
+AUDIT_TXN_DIGEST = "digest"
+AUDIT_TXN_NODE_REG = "nodeReg"
 
 # State proof fields
 STATE_PROOF = 'state_proof'
@@ -152,8 +156,14 @@ AUDIT = PlenumTransactions.AUDIT.value
 GET_TXN = PlenumTransactions.GET_TXN.value
 TXN_AUTHOR_AGREEMENT = PlenumTransactions.TXN_AUTHOR_AGREEMENT.value
 TXN_AUTHOR_AGREEMENT_AML = PlenumTransactions.TXN_AUTHOR_AGREEMENT_AML.value
+TXN_AUTHOR_AGREEMENT_DISABLE = PlenumTransactions.TXN_AUTHOR_AGREEMENT_DISABLE.value
 GET_TXN_AUTHOR_AGREEMENT = PlenumTransactions.GET_TXN_AUTHOR_AGREEMENT.value
 GET_TXN_AUTHOR_AGREEMENT_AML = PlenumTransactions.GET_TXN_AUTHOR_AGREEMENT_AML.value
+
+CURRENT_TXN_PAYLOAD_VERSIONS = defaultdict(lambda: "1")
+CURRENT_TXN_PAYLOAD_VERSIONS[TXN_AUTHOR_AGREEMENT] = "2"
+
+CURRENT_TXN_VERSION = "1"
 
 # TXN
 # TODO: manye of these constants will be replaced
@@ -162,8 +172,10 @@ TXN_PAYLOAD = "txn"
 TXN_PAYLOAD_TYPE = "type"
 TXN_PAYLOAD_PROTOCOL_VERSION = "protocolVersion"
 TXN_PAYLOAD_DATA = "data"
+TXN_PAYLOAD_VERSION = "ver"
 TXN_PAYLOAD_METADATA = "metadata"
 TXN_PAYLOAD_METADATA_FROM = "from"
+TXN_PAYLOAD_METADATA_ENDORSER = "endorser"
 TXN_PAYLOAD_METADATA_REQ_ID = "reqId"
 TXN_PAYLOAD_METADATA_DIGEST = "digest"
 TXN_PAYLOAD_METADATA_PAYLOAD_DIGEST = "payloadDigest"
@@ -182,6 +194,9 @@ TXN_SIGNATURE_VALUE = "value"
 
 TXN_AUTHOR_AGREEMENT_TEXT = "text"
 TXN_AUTHOR_AGREEMENT_VERSION = "version"
+TXN_AUTHOR_AGREEMENT_DIGEST = "digest"
+TXN_AUTHOR_AGREEMENT_RETIREMENT_TS = "retirement_ts"
+TXN_AUTHOR_AGREEMENT_RATIFICATION_TS = "ratification_ts"
 
 GET_TXN_AUTHOR_AGREEMENT_VERSION = "version"
 GET_TXN_AUTHOR_AGREEMENT_DIGEST = "digest"
@@ -251,6 +266,9 @@ BLS_LABEL = 'bls'
 TS_LABEL = 'ts'
 IDR_CACHE_LABEL = 'idr'
 ATTRIB_LABEL = 'attrib'
+SEQ_NO_DB_LABEL = 'seq_no_db'
+NODE_STATUS_DB_LABEL = 'node_status_db'
+LAST_SENT_PP_STORE_LABEL = 'last_sent_pp_store'
 
 VALID_LEDGER_IDS = (POOL_LEDGER_ID, DOMAIN_LEDGER_ID, CONFIG_LEDGER_ID, AUDIT_LEDGER_ID)
 
@@ -259,34 +277,4 @@ CURRENT_PROTOCOL_VERSION = PlenumProtocolVersion.TXN_FORMAT_1_0_SUPPORT.value
 OPERATION_SCHEMA_IS_STRICT = False
 SCHEMA_IS_STRICT = False
 
-
-class NodeHooks(UniqueSet):
-    PRE_STATIC_VALIDATION = 1
-    POST_STATIC_VALIDATION = 2
-    PRE_SIG_VERIFICATION = 3
-    POST_SIG_VERIFICATION = 4
-    PRE_DYNAMIC_VALIDATION = 5
-    POST_DYNAMIC_VALIDATION = 6
-    PRE_REQUEST_APPLICATION = 7
-    POST_REQUEST_APPLICATION = 8
-    PRE_REQUEST_COMMIT = 9
-    POST_REQUEST_COMMIT = 10
-    PRE_SEND_REPLY = 11
-    POST_SEND_REPLY = 12
-    POST_BATCH_CREATED = 13
-    POST_BATCH_REJECTED = 14
-    PRE_BATCH_COMMITTED = 15
-    POST_BATCH_COMMITTED = 16
-    POST_NODE_STOPPED = 17
-
-
-class ReplicaHooks(UniqueSet):
-    CREATE_PPR = 1
-    CREATE_PR = 2
-    CREATE_CM = 3
-    CREATE_ORD = 4
-    APPLY_PPR = 5
-    VALIDATE_PR = 6
-    VALIDATE_CM = 7
-    BATCH_CREATED = 8
-    BATCH_REJECTED = 9
+GENERAL_LIMIT_SIZE = 256

@@ -7,14 +7,15 @@ from plenum.test.node_catchup.helper import ensure_all_nodes_have_same_data
 from plenum.test.node_request.helper import sdk_ensure_pool_functional
 from plenum.test.stasher import delay_rules
 from plenum.test.test_node import checkProtocolInstanceSetup, ensureElectionsDone
+from plenum.test.view_change_service.helper import trigger_view_change
 
 nodeCount = 7
-VIEW_CHANGE_TIMEOUT = 5
+NEW_VIEW_TIMEOUT = 5
 
 
 @pytest.fixture(scope="module")
 def tconf(tconf):
-    with view_change_timeout(tconf, VIEW_CHANGE_TIMEOUT):
+    with view_change_timeout(tconf, NEW_VIEW_TIMEOUT):
         yield tconf
 
 
@@ -38,12 +39,11 @@ def test_catchup_to_next_view_during_view_change_by_primary(txnPoolNodeSet, loop
     with delay_rules(lagging_node.nodeIbStasher, delay_for_view(viewNo=2)):
         with delay_rules(lagging_node.nodeIbStasher, delay_for_view(viewNo=0), delay_for_view(viewNo=1)):
             # view change to viewNo=2 since a primary for viewNo=1 is a lagging node
-            for n in txnPoolNodeSet:
-                n.view_changer.on_master_degradation()
+            trigger_view_change(txnPoolNodeSet)
             waitForViewChange(looper,
                               other_nodes,
                               expectedViewNo=initial_view_no + 2,
-                              customTimeout=30)
+                              customTimeout=40)
             checkProtocolInstanceSetup(looper=looper, nodes=other_nodes, instances=range(3))
             ensure_all_nodes_have_same_data(looper, nodes=other_nodes)
 
@@ -53,7 +53,7 @@ def test_catchup_to_next_view_during_view_change_by_primary(txnPoolNodeSet, loop
 
             assert initial_view_no == lagging_node.viewNo
             assert initial_last_ordered == lagging_node.master_last_ordered_3PC
-            assert len(lagging_node.master_replica.requestQueues[DOMAIN_LEDGER_ID]) > 0
+            assert len(lagging_node.master_replica._ordering_service.requestQueues[DOMAIN_LEDGER_ID]) > 0
 
         # make sure that the first View Change happened on lagging node
         waitForViewChange(looper, [lagging_node], expectedViewNo=initial_view_no + 1,

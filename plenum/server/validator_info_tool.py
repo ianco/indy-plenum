@@ -11,6 +11,7 @@ import codecs
 from dateutil import parser
 import datetime
 
+from crypto.bls.indy_crypto.bls_crypto_indy_crypto import IndyCryptoBlsUtils
 from ledger.genesis_txn.genesis_txn_file_util import genesis_txn_path
 from plenum.common.config_util import getConfig
 from plenum.common.util import get_datetime_from_ts
@@ -149,7 +150,10 @@ class ValidatorNodeInfoTool:
     @property
     @none_on_fail
     def bls_key(self):
-        return self._node.bls_bft.bls_key_register.get_key_by_name(self._node.name)
+        bls_key = self._node.bls_bft.bls_key_register.get_key_by_name(self._node.name)
+        if bls_key is not None:
+            bls_key = IndyCryptoBlsUtils.bls_to_str(bls_key)
+        return bls_key
 
     @property
     @none_on_fail
@@ -432,8 +436,9 @@ class ValidatorNodeInfoTool:
             replica_stat["Watermarks"] = "{}:{}".format(replica.h, replica.H)
             replica_stat["Last_ordered_3PC"] = self._prepare_for_json(replica.last_ordered_3pc)
             stashed_txns = {}
-            stashed_txns["Stashed_checkpoints"] = self._prepare_for_json(len(replica.stashedRecvdCheckpoints))
-            stashed_txns["Stashed_PrePrepare"] = self._prepare_for_json(len(replica.prePreparesPendingPrevPP))
+            # TODO: Rename? Remove?
+            stashed_txns["Stashed_checkpoints"] = self._prepare_for_json(len(replica._checkpointer._received_checkpoints))
+            stashed_txns["Stashed_PrePrepare"] = self._prepare_for_json(len(replica._ordering_service.prePreparesPendingPrevPP))
             replica_stat["Stashed_txns"] = stashed_txns
             res[replica.name] = self._prepare_for_json(replica_stat)
         return res
@@ -465,14 +470,14 @@ class ValidatorNodeInfoTool:
 
     def _get_ic_queue(self):
         ic_queue = {}
-        for view_no, votes in self._node.view_changer.instance_changes.items():
+        for view_no, votes in self._node.master_replica._view_change_trigger_service._instance_changes.items():
             ics = {voter: {"reason": vote.reason}
                    for voter, vote in votes.items()}
             ic_queue[view_no] = {"Voters": self._prepare_for_json(ics)}
         return ic_queue
 
     def __get_start_vc_ts(self):
-        ts = self._node.view_changer.start_view_change_ts
+        ts = self._node.start_view_change_ts
         return str(datetime.datetime.utcfromtimestamp(ts))
 
     @property
@@ -578,15 +583,14 @@ class ValidatorNodeInfoTool:
                     "View_No": self._prepare_for_json(
                         self._node.viewNo),
                     "VC_in_progress": self._prepare_for_json(
-                        self._node.view_changer.view_change_in_progress),
+                        self._node.master_replica._consensus_data.waiting_for_new_view),
                     "Last_view_change_started_at": self._prepare_for_json(
                         self.__get_start_vc_ts()),
                     "Last_complete_view_no": self._prepare_for_json(
-                        self._node.view_changer.last_completed_view_no),
+                        self._node.last_completed_view_no),
                     "IC_queue": self._prepare_for_json(
                         self._get_ic_queue()),
-                    "VCDone_queue": self._prepare_for_json(
-                        self._node.view_changer._view_change_done)
+                    "VCDone_queue": self._prepare_for_json({})
                 },
                 "Catchup_status": {
                     "Ledger_statuses": self._prepare_for_json(

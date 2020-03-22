@@ -16,15 +16,15 @@ def ord_delay(nodes):
     processing_methods = dict()
     for n in nodes:
         delay_msgs.setdefault(n.name, OrderedSet())
-        processing_methods[n.name] = n.try_processing_ordered
-        n.try_processing_ordered = lambda msg: delay_msgs[n.name].add(msg)
+        processing_methods[n.name] = n.processOrdered
+        n.processOrdered = lambda msg: delay_msgs[n.name].add(msg)
 
     yield
 
     for n in nodes:
-        n.try_processing_ordered = processing_methods[n.name]
+        n.processOrdered = processing_methods[n.name]
         for msg in delay_msgs[n.name]:
-            n.try_processing_ordered(msg)
+            n.processOrdered(msg)
 
 
 def test_commit_signature_validation_integration(looper,
@@ -81,7 +81,7 @@ def test_commit_signature_validation_integration(looper,
 
         def check_nodes_receive_pp(view_no, seq_no):
             for node in txnPoolNodeSet:
-                assert node.master_replica.getPrePrepare(view_no, seq_no)
+                assert node.master_replica._ordering_service.get_preprepare(view_no, seq_no)
 
         looper.run(eventually(check_nodes_receive_pp, first_ordered[0], first_ordered[1] + 1))
 
@@ -98,7 +98,7 @@ def test_commit_signature_validation_integration(looper,
 
         def check_nodes_receive_commits(view_no, seq_no):
             for node in txnPoolNodeSet:
-                assert len(node.master_replica.commits[view_no, seq_no].voters) >= node.f + 1
+                assert len(node.master_replica._ordering_service.commits[view_no, seq_no].voters) >= node.f + 1
         looper.run(eventually(check_nodes_receive_commits, first_ordered[0], first_ordered[1] + 2))
 
     sdk_get_and_check_replies(looper, [request1])

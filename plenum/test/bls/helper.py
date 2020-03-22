@@ -4,12 +4,14 @@ import base58
 import os
 
 from crypto.bls.bls_crypto import BlsCryptoVerifier
+from crypto.bls.indy_crypto.bls_crypto_indy_crypto import IndyCryptoBlsUtils
 from plenum.bls.bls_crypto_factory import create_default_bls_crypto_factory
 from plenum.common.request import Request
 from plenum.common.txn_util import get_type, reqToTxn, get_payload_data
 from plenum.server.quorums import Quorums
 from crypto.bls.bls_multi_signature import MultiSignatureValue
 from plenum.test.buy_handler import BuyHandler
+from plenum.test.get_buy_handler import GetBuyHandler
 from state.pruning_state import PruningState
 from common.serializers.serialization import state_roots_serializer, proof_nodes_serializer, domain_state_serializer
 from plenum.common.constants import DOMAIN_LEDGER_ID, STATE_PROOF, MULTI_SIGNATURE, \
@@ -113,7 +115,7 @@ def calculate_multi_sig(creator, bls_bft_with_commits, quorums, pre_prepare):
     if not creator._can_calculate_multi_sig(key, quorums):
         return None
 
-    return creator._calculate_multi_sig(key, pre_prepare)
+    return creator._calculate_all_multi_sigs(key, pre_prepare)[0]
 
 
 def sdk_change_bls_key(looper, txnPoolNodeSet,
@@ -123,7 +125,8 @@ def sdk_change_bls_key(looper, txnPoolNodeSet,
                        add_wrong=False,
                        new_bls=None,
                        new_key_proof=None,
-                       check_functional=True):
+                       check_functional=True,
+                       pool_refresh=True):
     if add_wrong:
         _, new_blspk, key_proof = create_default_bls_crypto_factory().generate_bls_keys()
     else:
@@ -138,11 +141,13 @@ def sdk_change_bls_key(looper, txnPoolNodeSet,
                          None, None,
                          bls_key=key_in_txn,
                          services=None,
-                         key_proof=bls_key_proof)
+                         key_proof=bls_key_proof,
+                         pool_refresh=pool_refresh)
     poolSetExceptOne = list(txnPoolNodeSet)
     poolSetExceptOne.remove(node)
     waitNodeDataEquality(looper, node, *poolSetExceptOne)
-    sdk_pool_refresh(looper, sdk_pool_handle)
+    if pool_refresh:
+        sdk_pool_refresh(looper, sdk_pool_handle)
     if check_functional:
         sdk_ensure_pool_functional(looper, txnPoolNodeSet, sdk_wallet_steward, sdk_pool_handle)
     return new_blspk
@@ -154,7 +159,7 @@ def check_bls_key(blskey, node, nodes, add_wrong=False):
     '''
     keys = set()
     for n in nodes:
-        keys.add(n.bls_bft.bls_key_register.get_key_by_name(node.name))
+        keys.add(IndyCryptoBlsUtils.bls_to_str(n.bls_bft.bls_key_register.get_key_by_name(node.name)))
     assert len(keys) == 1
     if not add_wrong:
         assert blskey == next(iter(keys))
@@ -162,7 +167,7 @@ def check_bls_key(blskey, node, nodes, add_wrong=False):
     # check that this node has correct blskey
     if not add_wrong:
         assert node.bls_bft.can_sign_bls()
-        assert blskey == node.bls_bft.bls_crypto_signer.pk
+        assert blskey == IndyCryptoBlsUtils.bls_to_str(node.bls_bft.bls_crypto_signer.pk)
     else:
         assert not node.bls_bft.can_sign_bls()
 
@@ -172,7 +177,8 @@ def check_update_bls_key(node_num, saved_multi_sigs_count,
                          sdk_wallet_stewards,
                          sdk_wallet_client,
                          sdk_pool_handle,
-                         add_wrong=False):
+                         add_wrong=False,
+                         pool_refresh=True):
     # 1. Change BLS key for a specified NODE
     node = txnPoolNodeSet[node_num]
     sdk_wallet_steward = sdk_wallet_stewards[node_num]
@@ -180,7 +186,8 @@ def check_update_bls_key(node_num, saved_multi_sigs_count,
                                    node,
                                    sdk_pool_handle,
                                    sdk_wallet_steward,
-                                   add_wrong)
+                                   add_wrong,
+                                   pool_refresh=pool_refresh)
 
     # 2. Check that all Nodes see the new BLS key value
     check_bls_key(new_blspk, node, txnPoolNodeSet, add_wrong)
@@ -231,14 +238,12 @@ def validate_proof_for_write(result):
 
 def prepare_for_state(result):
     if get_type(result) == "buy":
-        from plenum.test.test_node import TestDomainRequestHandler
-        key, value = TestDomainRequestHandler.prepare_buy_for_state(result)
+        key, value = GetBuyHandler.prepare_buy_for_state(result)
         return key, value
 
 
 def prepare_for_state_read(req: Request):
     if req.txn_type == "buy":
-        from plenum.test.test_node import TestDomainRequestHandler
         txn = reqToTxn(req)
         key = BuyHandler.prepare_buy_key(req.identifier, req.reqId)
         value = domain_state_serializer.serialize({"amount": get_payload_data(txn)['amount']})

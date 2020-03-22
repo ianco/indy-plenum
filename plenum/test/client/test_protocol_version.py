@@ -6,13 +6,13 @@ from plenum.common.types import f
 from plenum.server.node import Node
 
 from plenum.common.constants import CURRENT_PROTOCOL_VERSION
-from plenum.common.exceptions import RequestNackedException
+from plenum.common.exceptions import RequestNackedException, CommonSdkIOException
 from plenum.test.helper import sdk_send_signed_requests, \
     sdk_get_and_check_replies, sdk_random_request_objects, \
     sdk_sign_request_objects, sdk_get_bad_response, sdk_send_random_and_check
 
 error_msg = 'Make sure that the latest LibIndy is used ' \
-            'and `set_protocol_version({})` is called'\
+            'and `set_protocol_version({})` is called' \
     .format(CURRENT_PROTOCOL_VERSION)
 
 
@@ -118,8 +118,8 @@ def test_request_with_invalid_version(looper,
 
     signed_reqs = sdk_sign_request_objects(looper, sdk_wallet_client, reqs_obj)
     reqs = sdk_send_signed_requests(sdk_pool_handle, signed_reqs)
-    sdk_get_bad_response(looper, reqs, RequestNackedException,
-                         'Unknown protocol version value. ' + error_msg)
+    sdk_get_bad_response(looper, reqs, CommonSdkIOException,
+                         'Got an error with code 113')
 
 
 def test_request_with_correct_version(looper,

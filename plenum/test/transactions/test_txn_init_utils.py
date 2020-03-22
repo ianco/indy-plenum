@@ -1,4 +1,5 @@
-from plenum.common.constants import NYM, NODE, CURRENT_PROTOCOL_VERSION
+from plenum.common.constants import NYM, NODE, CURRENT_PROTOCOL_VERSION, CURRENT_TXN_PAYLOAD_VERSIONS, \
+    CURRENT_TXN_VERSION
 from plenum.common.txn_util import init_empty_txn, set_payload_data, append_payload_metadata, append_txn_metadata
 from plenum.common.util import SortedDict
 
@@ -16,7 +17,7 @@ def test_init_empty_txn_no_protocol_ver():
         },
         "txnMetadata": {
         },
-        "ver": "1"
+        "ver": CURRENT_TXN_VERSION
     }
     assert SortedDict(expected) == SortedDict(txn)
 
@@ -34,7 +35,26 @@ def test_init_empty_txn_with_protocol_ver():
         },
         "txnMetadata": {
         },
-        "ver": "1"
+        "ver": CURRENT_TXN_VERSION
+    }
+    assert SortedDict(expected) == SortedDict(txn)
+
+
+def test_init_empty_txn_with_payload_ver():
+    txn = init_empty_txn(txn_type=NODE, protocol_version="3", txn_payload_version="10")
+    expected = {
+        "reqSignature": {},
+        "txn": {
+            "data": {},
+            "metadata": {
+            },
+            "protocolVersion": "3",
+            "type": NODE,
+            "ver": "10"
+        },
+        "txnMetadata": {
+        },
+        "ver": CURRENT_TXN_VERSION
     }
     assert SortedDict(expected) == SortedDict(txn)
 
@@ -53,7 +73,7 @@ def test_set_payload_metadata():
         },
         "txnMetadata": {
         },
-        "ver": "1"
+        "ver": CURRENT_TXN_VERSION
     })
     assert SortedDict(expected) == SortedDict(txn)
 
@@ -82,7 +102,7 @@ def test_append_payload_metadata():
         },
         "txnMetadata": {
         },
-        "ver": "1"
+        "ver": CURRENT_TXN_VERSION
     })
     assert SortedDict(expected) == SortedDict(txn)
 
@@ -108,6 +128,6 @@ def test_append_txn_metadata():
             "txnId": "dddd",
             "txnTime": 12345678,
         },
-        "ver": "1"
+        "ver": CURRENT_TXN_VERSION
     })
     assert SortedDict(expected) == SortedDict(txn)

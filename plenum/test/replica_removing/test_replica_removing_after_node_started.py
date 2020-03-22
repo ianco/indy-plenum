@@ -1,9 +1,12 @@
 import pytest
 
+from plenum.test.helper import waitForViewChange
+
 from plenum.test.node_catchup.helper import waitNodeDataEquality
 from plenum.test.node_catchup.test_config_ledger import start_stopped_node
 from plenum.test.pool_transactions.helper import disconnect_node_and_ensure_disconnected, sdk_add_new_steward_and_node
 from plenum.test.replica_removing.helper import check_replica_removed
+from plenum.test.view_change_service.helper import trigger_view_change
 from stp_core.loop.eventually import eventually
 from plenum.test.test_node import ensureElectionsDone, checkNodesConnected
 
@@ -42,6 +45,7 @@ def test_replica_removing_after_node_started(looper,
     4. Start View Change.
     5. Check that all replicas were restored.
     """
+    start_view_no = txnPoolNodeSet[0].viewNo
     start_replicas_count = txnPoolNodeSet[0].replicas.num_replicas
     instance_to_remove = txnPoolNodeSet[0].requiredNumberOfInstances - 1
     removed_primary_node = txnPoolNodeSet[instance_to_remove]
@@ -72,6 +76,8 @@ def test_replica_removing_after_node_started(looper,
                                                                 allPluginsPath)
     txnPoolNodeSet.append(new_node)
     looper.run(checkNodesConnected(txnPoolNodeSet))
+    instance_to_remove -= 1
+    waitForViewChange(looper, txnPoolNodeSet, expectedViewNo=start_view_no + 1)
     waitNodeDataEquality(looper, new_node, *txnPoolNodeSet[:-1],
                          exclude_from_check=['check_last_ordered_3pc_backup'])
     looper.run(eventually(check_replica_removed,
@@ -86,8 +92,7 @@ def test_replica_removing_after_node_started(looper,
     txnPoolNodeSet.append(removed_primary_node)
     looper.run(checkNodesConnected(txnPoolNodeSet))
     # start View Change
-    for node in txnPoolNodeSet:
-        node.view_changer.on_master_degradation()
+    trigger_view_change(txnPoolNodeSet)
     ensureElectionsDone(looper=looper, nodes=txnPoolNodeSet,
                         instances_list=range(txnPoolNodeSet[0].requiredNumberOfInstances),
                         customTimeout=tconf.TolerateBackupPrimaryDisconnection * 2)

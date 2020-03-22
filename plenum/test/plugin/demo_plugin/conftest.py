@@ -16,6 +16,11 @@ def do_plugin_initialisation_for_tests():
     import plenum.common
 
     importlib.reload(plenum.server.replica)
+    importlib.reload(plenum.server.consensus.view_change_trigger_service)
+    importlib.reload(plenum.server.consensus.view_change_service)
+    importlib.reload(plenum.server.consensus.view_change_storages)
+    importlib.reload(plenum.server.consensus.ordering_service)
+    importlib.reload(plenum.server.consensus.ordering_service_msg_validator)
     importlib.reload(plenum.server.node)
     importlib.reload(plenum.server.catchup.utils)
     importlib.reload(plenum.server.catchup.catchup_rep_service)
@@ -23,7 +28,6 @@ def do_plugin_initialisation_for_tests():
     importlib.reload(plenum.server.catchup.ledger_leecher_service)
     importlib.reload(plenum.server.catchup.node_leecher_service)
     importlib.reload(plenum.server.catchup.seeder_service)
-    importlib.reload(plenum.server.view_change.view_changer)
     importlib.reload(plenum.server.message_handlers)
     importlib.reload(plenum.server.observer.observable)
     importlib.reload(plenum.common.ledger_manager)

@@ -255,7 +255,7 @@ REMOTES_MESSAGE_QUOTA = 100
 # Max batch size for 3 phase commit
 Max3PCBatchSize = 1000
 # Max time to wait before creating a batch for 3 phase commit
-Max3PCBatchWait = 1
+Max3PCBatchWait = 3
 # Max allowed number of 3PC batches in flight (or None to disable limit)
 Max3PCBatchesInFlight = 4
 
@@ -291,10 +291,8 @@ MIN_STACK_RESTART_TIMEOUT = 1800  # seconds
 STACK_POSTRESTART_WAIT_TIME = 2  # seconds
 MAX_STACK_RESTART_TIME_DEVIATION = 300  # seconds
 
-VIEW_CHANGE_TIMEOUT = 420  # seconds
 INITIAL_PROPOSE_VIEW_CHANGE_TIMEOUT = 60
-INSTANCE_CHANGE_TIMEOUT = 60
-MIN_TIMEOUT_CATCHUPS_DONE_DURING_VIEW_CHANGE = 300
+NEW_VIEW_TIMEOUT = 30  # in secs
 
 CATCHUP_BATCH_SIZE = 5  # Minimum number of txns in single catchup request
 
@@ -393,6 +391,9 @@ ACCEPTABLE_FRESHNESS_INTERVALS_COUNT = 2
 # Limit for numbers of 3pc and checkpoint messages stashed in replica
 REPLICA_STASH_LIMIT = 100000
 
+# Limit for number of messages that are allowed to be stashed in view change service
+VIEW_CHANGE_SERVICE_STASH_LIMIT = 1000
+
 # Time, which we wait before request propagate, when discovered unfinalized preprepare
 PROPAGATE_REQUEST_DELAY = 2
 
@@ -408,3 +409,13 @@ TXN_AUTHOR_AGREEMENT_AML_CONTEXT_LIMIT = MSG_LEN_LIMIT - 2048
 # TAA acceptance time valid deviations (secs)
 TXN_AUTHOR_AGREEMENT_ACCEPTANCE_TIME_BEFORE_TAA_TIME = 120
 TXN_AUTHOR_AGREEMENT_ACCEPTANCE_TIME_AFTER_PP_TIME = 120
+
+# Flags
+TRANSPORT_BATCH_ENABLED = False
+PRE_PREPARE_REQUEST_ENABLED = True
+PREPARE_REQUEST_ENABLED = True
+COMMIT_REQUEST_ENABLED = True
+PROPAGATE_REQUEST_ENABLED = True
+
+# Dict[other_project_version: node_version]
+INDY_VERSION_MATCHING = {}

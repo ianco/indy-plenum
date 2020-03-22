@@ -1,19 +1,12 @@
-import pytest as pytest
-
 from plenum.common.constants import COMMIT, PREPREPARE, PREPARE
-from plenum.common.startable import Mode
-from plenum.test.delayers import vcd_delay, msg_rep_delay
-from plenum.test.helper import waitForViewChange, sdk_send_random_and_check, assertExp
+from plenum.server.replica_validator_enums import STASH_VIEW_3PC
+from plenum.test.delayers import msg_rep_delay, nv_delay
+from plenum.test.helper import waitForViewChange, sdk_send_random_and_check
 from plenum.test.node_catchup.helper import waitNodeDataEquality
 from plenum.test.stasher import delay_rules
 from plenum.test.test_node import ensureElectionsDone
+from plenum.test.view_change_service.helper import trigger_view_change
 from stp_core.loop.eventually import eventually
-
-
-@pytest.fixture(scope="module")
-def tconf(tconf):
-    tconf.MIN_TIMEOUT_CATCHUPS_DONE_DURING_VIEW_CHANGE = 20
-    return tconf
 
 
 def test_process_three_phase_msg_and_stashed_future_view(txnPoolNodeSet, looper, tconf,
@@ -31,21 +24,17 @@ def test_process_three_phase_msg_and_stashed_future_view(txnPoolNodeSet, looper,
     slow_node = txnPoolNodeSet[-1]
     fast_nodes = txnPoolNodeSet[:-1]
     view_no = slow_node.viewNo
-    old_stashed = {inst_id: r.stasher.num_stashed_future_view
+    old_stashed = {inst_id: r.stasher.stash_size(STASH_VIEW_3PC)
                    for inst_id, r in slow_node.replicas.items()}
-    last_ordered = {inst_id: r.last_ordered_3pc
-                    for inst_id, r in slow_node.replicas.items()}
     with delay_rules([slow_node.nodeIbStasher, ],
                      msg_rep_delay(types_to_delay=[PREPREPARE, PREPARE, COMMIT])):
-        with delay_rules([slow_node.nodeIbStasher, ], vcd_delay()):
-            for n in txnPoolNodeSet:
-                n.view_changer.on_master_degradation()
+        with delay_rules([slow_node.nodeIbStasher, ], nv_delay()):
+            trigger_view_change(txnPoolNodeSet)
             waitForViewChange(looper, fast_nodes, expectedViewNo=view_no + 1,
-                              customTimeout=2 * tconf.VIEW_CHANGE_TIMEOUT)
+                              customTimeout=2 * tconf.NEW_VIEW_TIMEOUT)
             ensureElectionsDone(looper=looper,
                                 nodes=fast_nodes,
                                 instances_list=range(fast_nodes[0].requiredNumberOfInstances))
-            looper.run(eventually(lambda: assertExp(slow_node.mode == Mode.synced)))
             sdk_send_random_and_check(looper,
                                       txnPoolNodeSet,
                                       sdk_pool_handle,
@@ -56,20 +45,13 @@ def test_process_three_phase_msg_and_stashed_future_view(txnPoolNodeSet, looper,
             # (len(txnPoolNodeSet) - 2) - prepare msgs
             # (len(txnPoolNodeSet) - 1) - commit msgs
             stashed_master_messages = 2 * (1 + (len(txnPoolNodeSet) - 2) + (len(txnPoolNodeSet) - 1))
-            stashed_backup_messages = 2 * (1 + (len(txnPoolNodeSet) - 2) + (len(txnPoolNodeSet) - 1))
-            assert slow_node.master_replica.stasher.num_stashed_future_view == old_stashed[0] + stashed_master_messages
-            assert all(r.stasher.num_stashed_future_view == old_stashed[inst_id] + stashed_backup_messages
-                       for inst_id, r in slow_node.replicas.items() if inst_id != 0)
-            assert all(r.last_ordered_3pc == last_ordered[inst_id]
-                       for inst_id, r in slow_node.replicas.items())
+            assert slow_node.master_replica.stasher.stash_size(STASH_VIEW_3PC) == old_stashed[
+                0] + stashed_master_messages
 
         def chk():
             for inst_id, r in slow_node.replicas.items():
-                if inst_id == 0:
-                    assert r.last_ordered_3pc == (view_no + 1, 2)
-                else:
-                    assert r.last_ordered_3pc == (view_no + 1, 2)
-                assert r.stasher.num_stashed_future_view == old_stashed[inst_id]
+                assert r.last_ordered_3pc[1] == 2
+                assert r.stasher.stash_size(STASH_VIEW_3PC) == 0
 
         looper.run(eventually(chk))
         waitNodeDataEquality(looper, slow_node, *fast_nodes)

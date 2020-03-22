@@ -12,17 +12,6 @@ logger = getlogger()
 
 nodeCount = 7
 
-@pytest.fixture(scope="module")
-def tconf(tconf):
-    old_timeout_restricted = tconf.RETRY_TIMEOUT_RESTRICTED
-    old_timeout_not_restricted = tconf.RETRY_TIMEOUT_NOT_RESTRICTED
-    tconf.RETRY_TIMEOUT_RESTRICTED = 2
-    tconf.RETRY_TIMEOUT_NOT_RESTRICTED = 2
-    yield tconf
-
-    tconf.RETRY_TIMEOUT_RESTRICTED = old_timeout_restricted
-    tconf.RETRY_TIMEOUT_NOT_RESTRICTED = old_timeout_not_restricted
-
 
 def check_count_connected_node(nodes, expected_count):
     assert set([n.connectedNodeCount for n in nodes]) == {expected_count}
@@ -78,7 +67,7 @@ def test_reconnect_primary_and_not_primary(looper,
                           timeout=5,
                           acceptableExceptions=[AssertionError]))
     looper.run(eventually(partial(checkViewNoForNodes, restNodes, expectedViewNo=old_view_no + 1),
-                          timeout=tconf.VIEW_CHANGE_TIMEOUT))
+                          timeout=tconf.NEW_VIEW_TIMEOUT))
     sdk_send_random_and_check(looper, restNodes, sdk_pool_handle, sdk_wallet_steward, 5)
     logger.debug("restNodes: {}".format(restNodes))
     restNodes.add(node_after_all_primary)

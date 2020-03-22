@@ -17,7 +17,7 @@ def create_observed_data(seq_no_start=1, seq_no_end=5):
     msg = BatchCommitted(reqs,
                          DOMAIN_LEDGER_ID,
                          0,
-                         0,
+                         1,
                          1,
                          get_utc_epoch(),
                          generate_state_root(),
@@ -25,7 +25,10 @@ def create_observed_data(seq_no_start=1, seq_no_end=5):
                          seq_no_start,
                          seq_no_end,
                          generate_state_root(),
-                         ['Alpha', 'Beta'])
+                         ['Alpha', 'Beta'],
+                         ['Alpha', 'Beta', 'Gamma', 'Delta'],
+                         0,
+                         'digest')
     return ObservedData(BATCH, msg)
 
 

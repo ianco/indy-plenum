@@ -58,6 +58,10 @@ def test_kv_store_metrics_config(looper, txnPoolNodeSet, tdir, tconf, sdk_pool_h
             MetricsName.AUTH_RULES_FROM_STATE_COUNT,
 
             # Obsolete metrics
+            MetricsName.SERVICE_VIEW_CHANGER_TIME,
+            MetricsName.VIEW_CHANGER_INBOX,
+            MetricsName.VIEW_CHANGER_OUTBOX,
+            MetricsName.MSGS_TO_VIEW_CHANGER,
             MetricsName.DESERIALIZE_DURING_UNPACK_TIME,
 
             # TODO: reduce monitor window so these events are also captured
@@ -72,7 +76,8 @@ def test_kv_store_metrics_config(looper, txnPoolNodeSet, tdir, tconf, sdk_pool_h
             MetricsName.STORAGE_IDR_CACHE_TABLES_SIZE,
             MetricsName.STORAGE_ATTRIBUTE_STORE_READERS,
             MetricsName.STORAGE_ATTRIBUTE_STORE_TABLES_NUM,
-            MetricsName.STORAGE_ATTRIBUTE_STORE_TABLES_SIZE
+            MetricsName.STORAGE_ATTRIBUTE_STORE_TABLES_SIZE,
+            MetricsName.UNPACK_BATCH_TIME
         }
 
         # Don't expect some metrics from master primary
@@ -93,14 +98,6 @@ def test_kv_store_metrics_config(looper, txnPoolNodeSet, tdir, tconf, sdk_pool_h
             unexpected_events.add(MetricsName.BACKUP_SEND_PREPREPARE_TIME)
             unexpected_events.add(MetricsName.BACKUP_CREATE_3PC_BATCH_TIME)
             unexpected_events.add(MetricsName.BLS_UPDATE_PREPREPARE_TIME)
-
-        if not node.primaryDecider:
-            unexpected_events.add(MetricsName.PRIMARY_DECIDER_ACTION_QUEUE)
-            unexpected_events.add(MetricsName.PRIMARY_DECIDER_AQ_STASH)
-            unexpected_events.add(MetricsName.PRIMARY_DECIDER_REPEATING_ACTIONS)
-            unexpected_events.add(MetricsName.PRIMARY_DECIDER_SCHEDULED)
-            unexpected_events.add(MetricsName.PRIMARY_DECIDER_INBOX)
-            unexpected_events.add(MetricsName.PRIMARY_DECIDER_OUTBOX)
 
         # Check that all event types happened during test
         metric_names = {ev.name for ev in events}

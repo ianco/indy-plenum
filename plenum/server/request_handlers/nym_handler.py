@@ -1,5 +1,6 @@
 from _sha256 import sha256
 from binascii import hexlify
+from typing import Optional
 
 from common.serializers.serialization import domain_state_serializer
 from ledger.util import F
@@ -12,7 +13,7 @@ from plenum.common.txn_util import get_payload_data, get_from, \
 from plenum.common.types import f
 from plenum.server.database_manager import DatabaseManager
 from plenum.server.request_handlers.handler_interfaces.write_request_handler import WriteRequestHandler
-from plenum.server.request_handlers.utils import is_steward, nym_to_state_key, get_nym_details
+from plenum.server.request_handlers.utils import is_steward, get_nym_details
 from stp_core.common.log import getlogger
 
 logger = getlogger()
@@ -29,7 +30,7 @@ class NymHandler(WriteRequestHandler):
     def static_validation(self, request: Request):
         pass
 
-    def dynamic_validation(self, request: Request):
+    def dynamic_validation(self, request: Request, req_pp_time: Optional[int]):
         self._validate_request_type(request)
         identifier, req_id, operation = get_request_data(request)
         error = None
@@ -70,8 +71,7 @@ class NymHandler(WriteRequestHandler):
             new_data[ROLE] = None
             new_data[VERKEY] = None
 
-        if ROLE in txn_data:
-            new_data[ROLE] = txn_data[ROLE]
+        new_data[ROLE] = txn_data.get(ROLE, None)
         if VERKEY in txn_data:
             new_data[VERKEY] = txn_data[VERKEY]
         new_data[F.seqNo.name] = get_seq_no(txn)

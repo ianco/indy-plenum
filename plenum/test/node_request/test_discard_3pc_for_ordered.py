@@ -13,13 +13,9 @@ from plenum.test.helper import sdk_send_batches_of_random_and_check
 @pytest.fixture(scope="module")
 def tconf(tconf):
     oldMax3PCBatchSize = tconf.Max3PCBatchSize
-    oldMax3PCBatchWait = tconf.Max3PCBatchWait
     tconf.Max3PCBatchSize = 6
-    tconf.Max3PCBatchWait = 2
     yield tconf
-
     tconf.Max3PCBatchSize = oldMax3PCBatchSize
-    tconf.Max3PCBatchWait = oldMax3PCBatchWait
 
 
 def test_discard_3PC_messages_for_already_ordered(looper, txnPoolNodeSet,
@@ -50,12 +46,12 @@ def test_discard_3PC_messages_for_already_ordered(looper, txnPoolNodeSet,
     def chk(node, inst_id, p_count, c_count):
         # A node will still record PREPRAREs even if more than n-f-1, till the
         # request is not ordered
-        assert len(node.replicas[inst_id].prepares) >= p_count
-        assert len(node.replicas[inst_id].commits) == c_count
+        assert len(node.replicas[inst_id]._ordering_service.prepares) >= p_count
+        assert len(node.replicas[inst_id]._ordering_service.commits) == c_count
 
     def count_discarded(inst_id, count):
         for node in other_nodes:
-            assert countDiscarded(node.replicas[inst_id],
+            assert countDiscarded(node.replicas[inst_id].stasher,
                                   'already ordered 3 phase message') == count
 
     # `slow_node` did not receive any PREPAREs or COMMITs

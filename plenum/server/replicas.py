@@ -1,14 +1,12 @@
 from collections import deque
-from typing import Generator
+from typing import Generator, Type, Callable
 
 from common.exceptions import PlenumTypeError
 from crypto.bls.bls_bft import BlsBft
-from crypto.bls.bls_key_manager import LoadBLSKeyError
 from plenum.bls.bls_bft_factory import create_default_bls_bft_factory
-from plenum.common.constants import BLS_PREFIX
 from plenum.common.metrics_collector import MetricsCollector, NullMetricsCollector
-from plenum.common.request import ReqKey
 from plenum.common.util import SortedDict
+from plenum.server.consensus.utils import replica_name_to_node_name
 from plenum.server.monitor import Monitor
 from plenum.server.replica import Replica
 from stp_core.common.log import getlogger
@@ -36,6 +34,7 @@ class Replicas:
         description = "master" if is_master else "backup"
         bls_bft = self._create_bls_bft_replica(is_master)
         replica = self._new_replica(instance_id, is_master, bls_bft)
+        replica.set_view_no(self._node.viewNo if self._node.viewNo is not None else 0)
         self._replicas[instance_id] = replica
         self._messages_to_replicas[instance_id] = deque()
         self._monitor.addInstance(instance_id)
@@ -54,32 +53,35 @@ class Replicas:
         if inst_id not in self._replicas:
             return
         replica = self._replicas.pop(inst_id)
-
-        # Aggregate all the currently forwarded requests
-        req_keys = set()
-        for msg in replica.inBox:
-            if isinstance(msg, ReqKey):
-                req_keys.add(msg.digest)
-        for req_queue in replica.requestQueues.values():
-            for req_key in req_queue:
-                req_keys.add(req_key)
-        for pp in replica.sentPrePrepares.values():
-            for req_key in pp.reqIdr:
-                req_keys.add(req_key)
-        for pp in replica.prePrepares.values():
-            for req_key in pp.reqIdr:
-                req_keys.add(req_key)
-
-        for req_key in req_keys:
-            if req_key in replica.requests:
-                replica.requests.ordered_by_replica(req_key)
-                replica.requests.free(req_key)
+        replica.cleanup()
 
         self._messages_to_replicas.pop(inst_id, None)
         self._monitor.removeInstance(inst_id)
         logger.display("{} removed replica {} from instance {}".
                        format(self._node.name, replica, replica.instId),
                        extra={"tags": ["node-replica"]})
+
+    def send_to_internal_bus(self, msg, inst_id: int=None):
+        if inst_id is None:
+            for replica in self._replicas.values():
+                replica.internal_bus.send(msg)
+        else:
+            if inst_id in self._replicas:
+                self._replicas[inst_id].internal_bus.send(msg)
+            else:
+                logger.info("Cannot send msg ({}) to the replica {} "
+                            "because it does not exist.".format(msg, inst_id))
+
+    def subscribe_to_internal_bus(self, message_type: Type, handler: Callable, inst_id: int=None):
+        if inst_id is None:
+            for replica in self._replicas.values():
+                replica.internal_bus.subscribe(message_type, handler)
+        else:
+            if inst_id in self._replicas:
+                self._replicas[inst_id].internal_bus.subscribe(message_type, handler)
+            else:
+                logger.info("Cannot subscribe for {} for the replica {} "
+                            "because it does not exist.".format(message_type, inst_id))
 
     # TODO unit test
     @property
@@ -161,12 +163,12 @@ class Replicas:
 
     @property
     def primary_name_by_inst_id(self) -> dict:
-        return {r.instId: r.primaryName.split(":", maxsplit=1)[0] if r.primaryName else None
+        return {r.instId: replica_name_to_node_name(r.primaryName)
                 for r in self._replicas.values()}
 
     @property
     def inst_id_by_primary_name(self) -> dict:
-        return {r.primaryName.split(":", maxsplit=1)[0]: r.instId
+        return {replica_name_to_node_name(r.primaryName): r.instId
                 for r in self._replicas.values() if r.primaryName}
 
     def register_new_ledger(self, ledger_id):
@@ -184,7 +186,7 @@ class Replicas:
             reqId, duration = unordered
 
             # get ppSeqNo and viewNo
-            preprepares = replica.sentPrePrepares if replica.isPrimary else replica.prePrepares
+            preprepares = replica._ordering_service.sent_preprepares if replica.isPrimary else replica._ordering_service.prePrepares
             ppSeqNo = None
             viewNo = None
             for key in preprepares:
@@ -195,31 +197,31 @@ class Replicas:
             if ppSeqNo is None or viewNo is None:
                 logger.warning('Unordered request with reqId: {} was not found in prePrepares. '
                                'Prepares count: {}, Commits count: {}'.format(reqId,
-                                                                              len(replica.prepares),
-                                                                              len(replica.commits)))
+                                                                              len(replica._ordering_service.prepares),
+                                                                              len(replica._ordering_service.commits)))
                 continue
 
             # get pre-prepare sender
             prepre_sender = replica.primaryNames.get(viewNo, 'UNKNOWN')
 
             # get prepares info
-            prepares = replica.prepares[(viewNo, ppSeqNo)][0] \
-                if (viewNo, ppSeqNo) in replica.prepares else []
+            prepares = replica._ordering_service.prepares[(viewNo, ppSeqNo)][0] \
+                if (viewNo, ppSeqNo) in replica._ordering_service.prepares else []
             n_prepares = len(prepares)
             str_prepares = 'noone'
             if n_prepares:
                 str_prepares = ', '.join(prepares)
 
             # get commits info
-            commits = replica.commits[(viewNo, ppSeqNo)][0] \
-                if (viewNo, ppSeqNo) in replica.commits else []
+            commits = replica._ordering_service.commits[(viewNo, ppSeqNo)][0] \
+                if (viewNo, ppSeqNo) in replica._ordering_service.commits else []
             n_commits = len(commits)
             str_commits = 'noone'
             if n_commits:
                 str_commits = ', '.join(commits)
 
             # get txn content
-            content = replica.requests[reqId].finalised.as_dict \
+            content = replica.requests[reqId].request.as_dict \
                 if reqId in replica.requests else 'no content saved'
 
             logger.warning('Consensus for digest {} was not achieved within {} seconds. '
@@ -229,7 +231,7 @@ class Replicas:
                            'Received {} valid Commits from {}. '
                            'Transaction contents: {}. '
                            .format(reqId, duration,
-                                   replica.primaryName.split(':')[0] if replica.primaryName is not None else None,
+                                   replica_name_to_node_name(replica.primaryName),
                                    prepre_sender,
                                    n_prepares, str_prepares, n_commits, str_commits, content))
 

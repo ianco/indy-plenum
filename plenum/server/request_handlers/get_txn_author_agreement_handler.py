@@ -1,9 +1,10 @@
 from common.serializers.serialization import config_state_serializer
 from plenum.common.constants import CONFIG_LEDGER_ID, GET_TXN_AUTHOR_AGREEMENT_VERSION, \
     GET_TXN_AUTHOR_AGREEMENT_DIGEST, GET_TXN_AUTHOR_AGREEMENT_TIMESTAMP, \
-    GET_TXN_AUTHOR_AGREEMENT
+    GET_TXN_AUTHOR_AGREEMENT, TXN_AUTHOR_AGREEMENT_DIGEST
 from plenum.common.exceptions import InvalidClientRequest
 from plenum.common.request import Request
+from plenum.common.types import f
 from plenum.server.database_manager import DatabaseManager
 from plenum.server.request_handlers.handler_interfaces.read_request_handler import ReadRequestHandler
 from plenum.server.request_handlers.static_taa_helper import StaticTAAHelper

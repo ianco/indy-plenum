@@ -1,14 +1,14 @@
 import pytest
 
 from plenum.common.constants import LEDGER_STATUS
-from plenum.server.view_change.view_changer import ViewChanger
 from plenum.test.delayers import msg_rep_delay
 from plenum.test.helper import checkViewNoForNodes, waitForViewChange, sdk_send_random_and_check, view_change_timeout
 from plenum.test.node_catchup.helper import ensure_all_nodes_have_same_data
 from plenum.test.pool_transactions.helper import disconnect_node_and_ensure_disconnected
 from plenum.test.stasher import delay_rules
 from plenum.test.test_node import get_master_primary_node
-from plenum.test.view_change.helper import start_stopped_node, ensure_view_change_by_primary_restart
+from plenum.test.view_change.helper import start_stopped_node, ensure_view_change_by_primary_restart, \
+    node_sent_instance_changes_count
 
 TestRunningTimeLimitSec = 150
 
@@ -34,7 +34,7 @@ def test_view_change_after_back_to_quorum_with_disconnected_primary(txnPoolNodeS
                                                   tconf,
                                                   tdir,
                                                   allPluginsPath,
-                                                  customTimeout=2 * tconf.VIEW_CHANGE_TIMEOUT,
+                                                  customTimeout=2 * tconf.NEW_VIEW_TIMEOUT,
                                                   exclude_from_check=['check_last_ordered_3pc_backup'])
 
     # Now primary should be Beta
@@ -53,7 +53,7 @@ def test_view_change_after_back_to_quorum_with_disconnected_primary(txnPoolNodeS
     # than quorum.
     ic_cnt = {}
     for n in remaining_nodes:
-        ic_cnt[n.name] = n.view_changer.spylog.count(ViewChanger.sendInstanceChange.__name__)
+        ic_cnt[n.name] = node_sent_instance_changes_count(n)
 
     # 3. Disconnect primary
     disconnect_node_and_ensure_disconnected(
@@ -64,7 +64,7 @@ def test_view_change_after_back_to_quorum_with_disconnected_primary(txnPoolNodeS
     looper.runFor(tconf.ToleratePrimaryDisconnection + 5)
     remaining_nodes = list(set(remaining_nodes) - {pr_node})
     for n in remaining_nodes:
-        assert ic_cnt[n.name] == n.view_changer.spylog.count(ViewChanger.sendInstanceChange.__name__)
+        assert ic_cnt[n.name] == node_sent_instance_changes_count(n)
 
     view_no = checkViewNoForNodes(remaining_nodes)
 
@@ -74,7 +74,7 @@ def test_view_change_after_back_to_quorum_with_disconnected_primary(txnPoolNodeS
                                        tdir, allPluginsPath,
                                        delay_instance_change_msgs=False,
                                        start=False)
-    # 5. delay catchup on Delat for more that INITIAL_PROPOSE_VIEW_CHANGE_TIMEOUT,
+    # 5. delay catchup on Delta for more that INITIAL_PROPOSE_VIEW_CHANGE_TIMEOUT,
     # so that Delta proposes INSTANCE_CHANGE from view=0 to view=1
     # (it doesn't yet know that the current view is 1, since it hasn't yet finished catchup)
     with delay_rules(restartedNode.nodeIbStasher, msg_rep_delay(types_to_delay=[LEDGER_STATUS])):
@@ -86,7 +86,7 @@ def test_view_change_after_back_to_quorum_with_disconnected_primary(txnPoolNodeS
     # 6. Check that view change happened eventually because
     # Delta re-send InstanceChang for view=2 after it finished catchup
     waitForViewChange(looper, remaining_nodes, expectedViewNo=(view_no + 1),
-                      customTimeout=3 * tconf.VIEW_CHANGE_TIMEOUT)
+                      customTimeout=3 * tconf.NEW_VIEW_TIMEOUT)
 
     # 7. ensure pool is working properly
     sdk_send_random_and_check(looper, remaining_nodes, sdk_pool_handle,

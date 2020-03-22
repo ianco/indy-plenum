@@ -6,11 +6,12 @@ from plenum.common.messages.node_messages import Checkpoint
 from plenum.common.startable import Mode
 from plenum.server.node import Node
 from plenum.server.replica import Replica
+from plenum.server.replica_validator_enums import STASH_VIEW_3PC
 from plenum.test import waits
-from plenum.test.checkpoints.helper import chkChkpoints, chk_chkpoints_for_instance
-from plenum.test.delayers import lsDelay, vcd_delay
+from plenum.test.checkpoints.helper import check_for_nodes, check_stable_checkpoint, check_for_instance
+from plenum.test.delayers import lsDelay, nv_delay
 from plenum.test.helper import sdk_send_random_and_check, assertExp, max_3pc_batch_limits, \
-    check_last_ordered_3pc_on_all_replicas, check_last_ordered_3pc_on_master, check_last_ordered_3pc_on_backup
+    check_last_ordered_3pc_on_master, check_last_ordered_3pc_on_backup
 from plenum.test.node_catchup.helper import waitNodeDataEquality
 from plenum.test.stasher import delay_rules
 from plenum.test.test_node import ensureElectionsDone
@@ -50,7 +51,7 @@ def test_checkpoints_after_view_change(tconf,
     initial_start_catchup = lagging_node.spylog.count(Node.start_catchup)
 
     with delay_rules(lagging_node.nodeIbStasher, lsDelay()):
-        with delay_rules(lagging_node.nodeIbStasher, vcd_delay()):
+        with delay_rules(lagging_node.nodeIbStasher, nv_delay()):
             ensure_view_change(looper, txnPoolNodeSet)
             looper.run(
                 eventually(
@@ -80,7 +81,7 @@ def test_checkpoints_after_view_change(tconf,
             )
 
             # all good nodes stabilized checkpoint
-            looper.run(eventually(chkChkpoints, rest_nodes, 2, 0))
+            looper.run(eventually(check_for_nodes, rest_nodes, check_stable_checkpoint, 10))
 
             assert get_stashed_checkpoints(lagging_node) == num_checkpoints * len(rest_nodes)
             # lagging node is doing the view change and stashing all checkpoints
@@ -107,16 +108,16 @@ def test_checkpoints_after_view_change(tconf,
     )
 
     # check that checkpoint is stabilized for master
-    looper.run(eventually(chk_chkpoints_for_instance, [lagging_node], 0, 2, 0))
+    looper.run(eventually(check_for_instance, [lagging_node], 0, check_stable_checkpoint, 10))
 
-    # check that the catch-up is finished
+    # check that the catch-up didn't happen
     assert lagging_node.mode == Mode.participating
-    assert lagging_node.spylog.count(Node.allLedgersCaughtUp) == initial_all_ledgers_caught_up + 1
-    assert lagging_node.spylog.count(Node.start_catchup) == initial_start_catchup + 1
+    assert lagging_node.spylog.count(Node.allLedgersCaughtUp) == initial_all_ledgers_caught_up
+    assert lagging_node.spylog.count(Node.start_catchup) == initial_start_catchup
 
     waitNodeDataEquality(looper, *txnPoolNodeSet, customTimeout=5)
 
 
 def get_stashed_checkpoints(node):
     return sum(
-        1 for (stashed, sender) in node.master_replica.stasher._stashed_future_view if isinstance(stashed, Checkpoint))
+        1 for (stashed, sender) in node.master_replica.stasher._queues[STASH_VIEW_3PC] if isinstance(stashed, Checkpoint))

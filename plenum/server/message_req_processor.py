@@ -1,14 +1,11 @@
 from typing import Dict, List
 
-from plenum.common.constants import LEDGER_STATUS, PREPREPARE, CONSISTENCY_PROOF, \
-    PROPAGATE, PREPARE, COMMIT
+from plenum.common.constants import LEDGER_STATUS, CONSISTENCY_PROOF, PROPAGATE
 from plenum.common.messages.node_messages import MessageReq, MessageRep
 from plenum.common.metrics_collector import measure_time, MetricsName, NullMetricsCollector
 from plenum.common.types import f
 from stp_core.common.log import getlogger
-from plenum.server.message_handlers import LedgerStatusHandler, \
-    ConsistencyProofHandler, PreprepareHandler, PrepareHandler, PropagateHandler, \
-    CommitHandler
+from plenum.server.message_handlers import LedgerStatusHandler, ConsistencyProofHandler, PropagateHandler
 
 logger = getlogger()
 
@@ -20,9 +17,6 @@ class MessageReqProcessor:
         self.handlers = {
             LEDGER_STATUS: LedgerStatusHandler(self),
             CONSISTENCY_PROOF: ConsistencyProofHandler(self),
-            PREPREPARE: PreprepareHandler(self),
-            PREPARE: PrepareHandler(self),
-            COMMIT: CommitHandler(self),
             PROPAGATE: PropagateHandler(self)
         }
 

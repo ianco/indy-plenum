@@ -4,7 +4,7 @@ import pytest
 
 from plenum.common.constants import CURRENT_PROTOCOL_VERSION, DOMAIN_LEDGER_ID
 from plenum.common.messages.fields import IterableField, \
-    LedgerIdField, NonNegativeNumberField, MerkleRootField, TimestampField
+    LedgerIdField, NonNegativeNumberField, MerkleRootField, TimestampField, LimitedLengthStringField
 from plenum.common.messages.node_messages import BatchCommitted
 from plenum.common.util import get_utc_epoch
 from plenum.test.helper import sdk_random_request_objects, generate_state_root
@@ -21,7 +21,10 @@ EXPECTED_ORDERED_FIELDS = OrderedDict([
     ("seqNoStart", NonNegativeNumberField),
     ("seqNoEnd", NonNegativeNumberField),
     ("auditTxnRootHash", MerkleRootField),
-    ("primaries", IterableField)
+    ("primaries", IterableField),
+    ("nodeReg", IterableField),
+    ("originalViewNo", NonNegativeNumberField),
+    ("digest", LimitedLengthStringField)
 ])
 
 
@@ -31,7 +34,7 @@ def create_valid_batch_committed():
     return BatchCommitted(reqs,
                           DOMAIN_LEDGER_ID,
                           0,
-                          0,
+                          1,
                           1,
                           get_utc_epoch(),
                           generate_state_root(),
@@ -39,14 +42,17 @@ def create_valid_batch_committed():
                           1,
                           2,
                           generate_state_root(),
-                          ['Alpha', 'Beta'])
+                          ['Alpha', 'Beta'],
+                          ['Alpha', 'Beta', 'Gamma', 'Delta'],
+                          0,
+                          'digest')
 
 
 def create_invalid_batch_committed():
     return BatchCommitted(["aaaa", "bbbb"],
                           DOMAIN_LEDGER_ID,
                           0,
-                          0,
+                          1,
                           1,
                           get_utc_epoch(),
                           generate_state_root(),
@@ -54,7 +60,10 @@ def create_invalid_batch_committed():
                           1,
                           2,
                           generate_state_root(),
-                          ['Alpha', 'Beta'])
+                          ['Alpha', 'Beta'],
+                          ['Alpha', 'Beta', 'Gamma', 'Delta'],
+                          0,
+                          'digest')
 
 
 def create_valid_batch_committed_as_dict():

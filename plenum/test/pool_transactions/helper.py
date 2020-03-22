@@ -16,7 +16,7 @@ from plenum.common.signer_simple import SimpleSigner
 from plenum.common.util import randomString, hexToFriendly
 from plenum.test.helper import sdk_sign_request_objects, \
     sdk_send_signed_requests, sdk_json_to_request_object, \
-    sdk_get_and_check_replies, sdk_sign_request_strings \
+    sdk_get_and_check_replies, sdk_sign_request_strings
 
 from plenum.test.node_request.helper import sdk_ensure_pool_functional
 from plenum.test.test_node import TestNode, \
@@ -48,7 +48,7 @@ def prepare_new_node_data(tconf, tdir, newNodeName, configClass=PNodeConfigHelpe
     (nodeIp, nodePort), (clientIp, clientPort) = genHa(2)
     config_helper = configClass(newNodeName, tconf, chroot=tdir)
     pubkey, verkey, bls_key, key_proof = initNodeKeysForBothStacks(newNodeName, config_helper.keys_dir,
-                                                   sigseed, override=True)
+                                                                   sigseed, override=True)
     return sigseed, verkey, bls_key, nodeIp, nodePort, clientIp, clientPort, key_proof
 
 
@@ -166,7 +166,8 @@ def sdk_add_new_steward_and_node(looper,
                                  nodeClass=TestNode,
                                  transformNodeOpFunc=None,
                                  do_post_node_creation: Callable = None,
-                                 services=[VALIDATOR]):
+                                 services=[VALIDATOR],
+                                 wait_till_added=True):
     new_steward_wallet_handle = sdk_add_new_nym(looper,
                                                 sdk_pool_handle,
                                                 sdk_wallet_steward,
@@ -183,7 +184,8 @@ def sdk_add_new_steward_and_node(looper,
         autoStart=autoStart,
         nodeClass=nodeClass,
         do_post_node_creation=do_post_node_creation,
-        services=services)
+        services=services,
+        wait_till_added=wait_till_added)
     return new_steward_wallet_handle, new_node
 
 
@@ -217,7 +219,8 @@ def sdk_add_new_node(looper,
                      tdir, tconf,
                      allPluginsPath=None, autoStart=True, nodeClass=TestNode,
                      do_post_node_creation: Callable = None,
-                     services=[VALIDATOR]):
+                     services=[VALIDATOR],
+                     wait_till_added=True):
     nodeClass = nodeClass or TestNode
     sigseed, verkey, bls_key, nodeIp, nodePort, clientIp, clientPort, key_proof = \
         prepare_new_node_data(tconf, tdir, new_node_name)
@@ -240,8 +243,9 @@ def sdk_add_new_node(looper,
     request_couple = sdk_sign_and_send_prepared_request(looper, steward_wallet_handle,
                                                         sdk_pool_handle, node_request)
 
-    # waitng for replies
-    sdk_get_and_check_replies(looper, [request_couple])
+    if wait_till_added:
+        # waiting for replies
+        sdk_get_and_check_replies(looper, [request_couple])
 
     return create_and_start_new_node(looper, new_node_name, tdir, sigseed,
                                      (nodeIp, nodePort), (clientIp, clientPort),
@@ -317,7 +321,8 @@ def sdk_send_update_node(looper, sdk_submitter_wallet,
                          client_ip, client_port,
                          services=[VALIDATOR],
                          bls_key=None,
-                         key_proof=None):
+                         key_proof=None,
+                         pool_refresh=True):
     _, submitter_did = sdk_submitter_wallet
     # filling node request
     node_request = looper.loop.run_until_complete(
@@ -338,7 +343,8 @@ def sdk_send_update_node(looper, sdk_submitter_wallet,
 
     # waitng for replies
     reply = sdk_get_and_check_replies(looper, [request_couple])[0][1]
-    sdk_pool_refresh(looper, sdk_pool_handle)
+    if pool_refresh:
+        sdk_pool_refresh(looper, sdk_pool_handle)
     return reply
 
 
@@ -459,10 +465,6 @@ def disconnectPoolNode(poolNodes: Iterable,
                              'is not found in the passed pool node list {}'
                              .format(disconnect, poolNodes))
 
-    for node in poolNodes:
-        if node.name != disconnect:
-            node.nodestack.disconnectByName(disconnect)
-
 
 def reconnectPoolNode(looper: Looper,
                       poolNodes: Iterable,
@@ -484,10 +486,6 @@ def reconnectPoolNode(looper: Looper,
         raise AssertionError('The node {} which should be reconnected '
                              'is not found in the passed pool node list {}'
                              .format(connect, poolNodes))
-
-    for node in poolNodes:
-        if node.name != connect:
-            node.nodestack.reconnectRemoteWithName(connect)
 
 
 def disconnect_node_and_ensure_disconnected(looper: Looper,
@@ -545,3 +543,17 @@ def sdk_add_2_nodes(looper, txnPoolNodeSet,
         sdk_pool_refresh(looper, sdk_pool_handle)
         new_nodes.append(new_node)
     return new_nodes
+
+
+def sdk_add_new_nym_without_waiting(looper, sdk_pool_handle, creators_wallet,
+                                    alias=None, role=None, seed=None,
+                                    dest=None, verkey=None, skipverkey=False):
+    seed = seed or randomString(32)
+    alias = alias or randomString(5)
+    wh, _ = creators_wallet
+
+    nym_request, new_did = looper.loop.run_until_complete(
+        prepare_nym_request(creators_wallet, seed,
+                            alias, role, dest, verkey, skipverkey))
+    sdk_sign_and_send_prepared_request(looper, creators_wallet,
+                                       sdk_pool_handle, nym_request)

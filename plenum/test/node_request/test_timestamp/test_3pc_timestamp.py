@@ -17,13 +17,9 @@ from plenum.test.helper import sdk_send_random_and_check
 @pytest.fixture(scope="module")
 def tconf(tconf):
     oldMax3PCBatchSize = tconf.Max3PCBatchSize
-    oldMax3PCBatchWait = tconf.Max3PCBatchWait
     tconf.Max3PCBatchSize = 2
-    tconf.Max3PCBatchWait = 2
     yield tconf
-
     tconf.Max3PCBatchSize = oldMax3PCBatchSize
-    tconf.Max3PCBatchWait = oldMax3PCBatchWait
 
 
 def test_replicas_prepare_time(looper, txnPoolNodeSet, sdk_pool_handle, sdk_wallet_client):
@@ -44,13 +40,13 @@ def test_replicas_prepare_time(looper, txnPoolNodeSet, sdk_pool_handle, sdk_wall
             rec_prps = defaultdict(list)
             for p in recvd_prepares(r):
                 rec_prps[(p.viewNo, p.ppSeqNo)].append(p)
-            pp_coll = r.sentPrePrepares if r.isPrimary else r.prePrepares
+            pp_coll = r._ordering_service.sent_preprepares if r.isPrimary else r._ordering_service.prePrepares
             for key, pp in pp_coll.items():
                 for p in rec_prps[key]:
                     assert pp.ppTime == p.ppTime
 
             # `last_accepted_pre_prepare_time` is the time of the last PRE-PREPARE
-            assert r.last_accepted_pre_prepare_time == pp_coll.peekitem(-1)[
+            assert r._ordering_service.last_accepted_pre_prepare_time == pp_coll.peekitem(-1)[
                 1].ppTime
 
             # The ledger should store time for each txn and it should be same
@@ -86,7 +82,7 @@ def test_non_primary_accepts_pre_prepare_time(looper, txnPoolNodeSet,
     make_clock_faulty(confused_npr.node)
 
     old_acceptable_rvs = getAllReturnVals(
-        confused_npr, confused_npr.is_pre_prepare_time_acceptable)
+        confused_npr._ordering_service, confused_npr._ordering_service._is_pre_prepare_time_acceptable)
     old_susp_count = get_timestamp_suspicion_count(confused_npr.node)
     sdk_send_random_and_check(looper,
                               txnPoolNodeSet,
@@ -97,7 +93,7 @@ def test_non_primary_accepts_pre_prepare_time(looper, txnPoolNodeSet,
     assert get_timestamp_suspicion_count(confused_npr.node) > old_susp_count
 
     new_acceptable_rvs = getAllReturnVals(
-        confused_npr, confused_npr.is_pre_prepare_time_acceptable)
+        confused_npr._ordering_service, confused_npr._ordering_service._is_pre_prepare_time_acceptable)
 
     # `is_pre_prepare_time_acceptable` first returned False then returned True
     assert [True, False, *old_acceptable_rvs] == new_acceptable_rvs

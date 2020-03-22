@@ -92,10 +92,6 @@ def testPrimarySelectionAfterViewChange(  # noqa
     ensure_view_change(looper, txnPoolNodeSet)
     ensureElectionsDone(looper=looper, nodes=txnPoolNodeSet)
 
-    for n in txnPoolNodeSet:
-        assert n.spylog.count(
-            n.allLedgersCaughtUp) > catchup_complete_count[n.name]
-
     # Primary replicas before view change
     prBeforeVC = primaryReplicas
 

@@ -1,24 +1,17 @@
 from functools import partial
-from unittest.mock import patch
 
-from plenum.common.constants import VIEW_CHANGE_DONE
 from plenum.common.messages.node_messages import ViewChangeStartMessage
-from plenum.common.types import f
-from plenum.server.view_change.pre_view_change_strategies import VCStartMsgStrategy
 
-from plenum.server.node import Node
-from plenum.server.view_change.view_changer import ViewChanger
 from plenum.test.delayers import msg_rep_delay
 from plenum.test.helper import sdk_send_random_and_check, assertExp, waitForViewChange
 
 from plenum.test import waits
 from plenum.test.node_catchup.helper import waitNodeDataEquality
-from plenum.test.node_request.helper import sdk_ensure_pool_functional
 from plenum.test.pool_transactions.helper import disconnect_node_and_ensure_disconnected
-from plenum.test.restart.helper import get_group, restart_nodes
 from plenum.test.stasher import delay_rules
 from plenum.test.test_node import checkNodesConnected, ensureElectionsDone
 from plenum.test.view_change.helper import start_stopped_node
+from plenum.test.view_change_service.helper import trigger_view_change
 from stp_core.loop.eventually import eventually
 
 
@@ -90,8 +83,7 @@ def test_restart_node_with_view_changes(tdir, tconf,
             eventually(lambda: assertExp(len(lagging_node.nodeIbStasher.delayeds) >= 3)))
 
         # Start ViewChange (0 -> 1)
-        for n in rest_nodes:
-            n.view_changer.on_master_degradation()
+        trigger_view_change(rest_nodes)
 
         # Lagging node still did not catchup, so it can't participate and process I_CH
         looper.run(
@@ -104,9 +96,6 @@ def test_restart_node_with_view_changes(tdir, tconf,
             lambda: assertExp(lagging_node.viewNo == start_view_no)))
 
     # Unpatch ViewChangeStartMessages processing and process delayed messages
-    processor = partial(VCStartMsgStrategy.on_view_change_started,
-                        lagging_node)
-    lagging_node.nodeMsgRouter.add((ViewChangeStartMessage, processor))
     for msg in view_change_started_messages:
         lagging_node.view_changer.node.nodeInBox.append((msg[1],
                                                          lagging_node.view_changer.node.name))
@@ -117,8 +106,7 @@ def test_restart_node_with_view_changes(tdir, tconf,
                       customTimeout=waits.expectedPoolViewChangeStartedTimeout(len(txnPoolNodeSet)))
 
     # Start ViewChange (1 -> 2)
-    for n in rest_nodes:
-        n.view_changer.on_master_degradation()
+    trigger_view_change(rest_nodes)
     waitForViewChange(looper,
                       txnPoolNodeSet,
                       expectedViewNo=start_view_no + 2,

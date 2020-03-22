@@ -1,4 +1,5 @@
 import json
+from typing import Optional
 
 from plenum.common.constants import TXN_TYPE, DATA, CONFIG_LEDGER_ID
 from plenum.common.request import Request
@@ -20,7 +21,7 @@ class WriteConfHandler(WriteRequestHandler):
                          txn_type=WRITE_CONF,
                          ledger_id=CONFIG_LEDGER_ID)
 
-    def dynamic_validation(self, request: Request):
+    def dynamic_validation(self, request: Request, req_pp_time: Optional[int]):
         pass
 
     def static_validation(self, request: Request):
@@ -48,8 +49,8 @@ class ReadConfHandler(ReadRequestHandler):
 
 class ConfigTestBootstrapClass(TestNodeBootstrap):
 
-    def register_config_req_handlers(self):
-        super().register_config_req_handlers()
+    def _register_config_req_handlers(self):
+        super()._register_config_req_handlers()
         write_rh = WriteConfHandler(self.node.db_manager)
         read_rh = ReadConfHandler(self.node.db_manager)
         self.node.write_manager.register_req_handler(write_rh)

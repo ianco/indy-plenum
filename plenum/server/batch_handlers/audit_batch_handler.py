@@ -3,7 +3,8 @@ from collections import Iterable
 from common.exceptions import LogicError
 from ledger.ledger import Ledger
 from plenum.common.constants import AUDIT_LEDGER_ID, TXN_VERSION, AUDIT_TXN_VIEW_NO, AUDIT_TXN_PP_SEQ_NO, \
-    AUDIT_TXN_LEDGERS_SIZE, AUDIT_TXN_LEDGER_ROOT, AUDIT_TXN_STATE_ROOT, AUDIT_TXN_PRIMARIES
+    AUDIT_TXN_LEDGERS_SIZE, AUDIT_TXN_LEDGER_ROOT, AUDIT_TXN_STATE_ROOT, AUDIT_TXN_PRIMARIES, AUDIT_TXN_DIGEST, \
+    AUDIT_TXN_NODE_REG, CURRENT_TXN_PAYLOAD_VERSIONS, AUDIT, CURRENT_TXN_VERSION
 from plenum.common.ledger_uncommitted_tracker import LedgerUncommittedTracker
 from plenum.common.transactions import PlenumTransactions
 from plenum.common.txn_util import init_empty_txn, set_payload_data, get_payload_data, get_seq_no
@@ -80,14 +81,16 @@ class AuditBatchHandler(BatchRequestHandler):
 
     def _create_audit_txn_data(self, three_pc_batch, last_audit_txn):
         # 1. general format and (view_no, pp_seq_no)
+        view_no = three_pc_batch.original_view_no if three_pc_batch.original_view_no is not None else three_pc_batch.view_no
         txn = {
-            TXN_VERSION: "1",
-            AUDIT_TXN_VIEW_NO: three_pc_batch.view_no,
+            TXN_VERSION: CURRENT_TXN_PAYLOAD_VERSIONS[AUDIT],
+            AUDIT_TXN_VIEW_NO: view_no,
             AUDIT_TXN_PP_SEQ_NO: three_pc_batch.pp_seq_no,
             AUDIT_TXN_LEDGERS_SIZE: {},
             AUDIT_TXN_LEDGER_ROOT: {},
             AUDIT_TXN_STATE_ROOT: {},
-            AUDIT_TXN_PRIMARIES: None
+            AUDIT_TXN_PRIMARIES: None,
+            AUDIT_TXN_DIGEST: three_pc_batch.pp_digest
         }
 
         for lid, ledger in self.database_manager.ledgers.items():
@@ -98,14 +101,17 @@ class AuditBatchHandler(BatchRequestHandler):
 
             # 3. ledger root (either root_hash or seq_no to last changed)
             # TODO: support setting for multiple ledgers
-            self.__fill_ledger_root_hash(txn, lid, ledger, last_audit_txn, three_pc_batch)
+            self._fill_ledger_root_hash(txn, lid, ledger, last_audit_txn, three_pc_batch)
 
         # 5. set primaries field
-        self.__fill_primaries(txn, three_pc_batch, last_audit_txn)
+        self._fill_primaries(txn, three_pc_batch, last_audit_txn)
+
+        # 6. set nodeReg field
+        self._fill_node_reg(txn, three_pc_batch, last_audit_txn)
 
         return txn
 
-    def __fill_ledger_root_hash(self, txn, lid, ledger, last_audit_txn, three_pc_batch):
+    def _fill_ledger_root_hash(self, txn, lid, ledger, last_audit_txn, three_pc_batch):
         last_audit_txn_data = get_payload_data(last_audit_txn) if last_audit_txn is not None else None
 
         if lid == three_pc_batch.ledger_id:
@@ -124,7 +130,8 @@ class AuditBatchHandler(BatchRequestHandler):
             txn[AUDIT_TXN_STATE_ROOT][lid] = Ledger.hashToStr(self.database_manager.get_state(lid).headHash)
 
         # 2. Usual case -- this ledger was updated since the last audit txn
-        elif last_audit_txn_data is not None and last_audit_txn_data[AUDIT_TXN_LEDGERS_SIZE].get(lid, None) is not None and \
+        elif last_audit_txn_data is not None and last_audit_txn_data[AUDIT_TXN_LEDGERS_SIZE].get(lid,
+                                                                                                 None) is not None and \
                 ledger.uncommitted_size > last_audit_txn_data[AUDIT_TXN_LEDGERS_SIZE][lid]:
             txn[AUDIT_TXN_LEDGER_ROOT][lid] = Ledger.hashToStr(ledger.uncommitted_root_hash)
             txn[AUDIT_TXN_STATE_ROOT][lid] = Ledger.hashToStr(self.database_manager.get_state(lid).headHash)
@@ -141,7 +148,7 @@ class AuditBatchHandler(BatchRequestHandler):
         elif last_audit_txn_data:
             txn[AUDIT_TXN_LEDGER_ROOT][lid] = 1
 
-    def __fill_primaries(self, txn, three_pc_batch, last_audit_txn):
+    def _fill_primaries(self, txn, three_pc_batch, last_audit_txn):
         last_audit_txn_data = get_payload_data(last_audit_txn) if last_audit_txn is not None else None
         last_txn_value = last_audit_txn_data[AUDIT_TXN_PRIMARIES] if last_audit_txn_data else None
         current_primaries = three_pc_batch.primaries
@@ -179,3 +186,40 @@ class AuditBatchHandler(BatchRequestHandler):
         else:
             raise LogicError('Incorrect primaries field in audit ledger (seq_no: {}. value: {})'.format(
                 get_seq_no(last_audit_txn), last_txn_value))
+
+    def _fill_node_reg(self, txn, three_pc_batch, last_audit_txn):
+        last_audit_txn_data = get_payload_data(last_audit_txn) if last_audit_txn is not None else None
+        last_audit_node_reg = last_audit_txn_data.get(AUDIT_TXN_NODE_REG) if last_audit_txn_data else None
+        current_node_reg = three_pc_batch.node_reg
+
+        if current_node_reg is None:
+            return
+
+        # 1. First audit txn with node reg
+        if last_audit_node_reg is None:
+            txn[AUDIT_TXN_NODE_REG] = current_node_reg
+
+        # 2. Previous nodeReg field contains nodeReg list
+        # If nodeReg did not changed, we will store seq_no delta
+        # between current txn and last persisted nodeReg, i.e.
+        # we can find seq_no of last actual nodeReg, like:
+        # last_audit_txn_seq_no - last_audit_txn[AUDIT_TXN_NODE_REG]
+        elif isinstance(last_audit_node_reg, Iterable):
+            if last_audit_node_reg == current_node_reg:
+                txn[AUDIT_TXN_NODE_REG] = 1
+            else:
+                txn[AUDIT_TXN_NODE_REG] = current_node_reg
+
+        # 3. Previous nodeReg field is delta
+        elif isinstance(last_audit_node_reg, int) and last_audit_node_reg < self.ledger.uncommitted_size:
+            last_node_reg_seq_no = get_seq_no(last_audit_txn) - last_audit_node_reg
+            last_node_reg = get_payload_data(
+                self.ledger.get_by_seq_no_uncommitted(last_node_reg_seq_no))[AUDIT_TXN_NODE_REG]
+            if isinstance(last_node_reg, Iterable):
+                if last_node_reg == current_node_reg:
+                    txn[AUDIT_TXN_NODE_REG] = last_audit_node_reg + 1
+                else:
+                    txn[AUDIT_TXN_NODE_REG] = current_node_reg
+            else:
+                raise LogicError('Value, mentioned in nodeReg field must be a '
+                                 'seq_no of a txn with nodeReg')

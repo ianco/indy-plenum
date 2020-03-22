@@ -9,7 +9,7 @@ from functools import partial
 from itertools import permutations, combinations
 from shutil import copyfile
 from sys import executable
-from time import sleep
+from time import sleep, perf_counter
 from typing import Tuple, Iterable, Dict, Optional, List, Any, Sequence, Union, Callable
 
 import base58
@@ -17,37 +17,42 @@ import pytest
 from indy.pool import set_protocol_version
 
 from common.serializers.serialization import invalid_index_serializer
-from plenum.common.event_bus import ExternalBus
+from crypto.bls.bls_factory import BlsFactoryCrypto
+from plenum.common.event_bus import ExternalBus, InternalBus
+from plenum.common.member.member import Member
+from plenum.common.member.steward import Steward
+from plenum.common.signer_did import DidSigner
 from plenum.common.signer_simple import SimpleSigner
-from plenum.common.timer import QueueTimer
+from plenum.common.timer import QueueTimer, TimerService
 from plenum.config import Max3PCBatchWait
 from psutil import Popen
 import json
 import asyncio
 
 from indy.ledger import sign_and_submit_request, sign_request, submit_request, build_node_request, \
-    build_pool_config_request, multi_sign_request
+    multi_sign_request
 from indy.error import ErrorCode, IndyError
 
 from ledger.genesis_txn.genesis_txn_file_util import genesis_txn_file
 from plenum.common.constants import DOMAIN_LEDGER_ID, OP_FIELD_NAME, REPLY, REQNACK, REJECT, \
-    CURRENT_PROTOCOL_VERSION
+    CURRENT_PROTOCOL_VERSION, STEWARD, VALIDATOR, TRUSTEE, DATA, BLS_KEY, BLS_KEY_PROOF
 from plenum.common.exceptions import RequestNackedException, RequestRejectedException, CommonSdkIOException, \
     PoolLedgerTimeoutException
 from plenum.common.messages.node_messages import Reply, PrePrepare, Prepare, Commit
-from plenum.common.txn_util import get_req_id, get_from
+from plenum.common.txn_util import get_req_id, get_from, get_payload_data
 from plenum.common.types import f, OPERATION
 from plenum.common.util import getNoInstances, get_utc_epoch
 from plenum.common.config_helper import PNodeConfigHelper
 from plenum.common.request import Request
+from plenum.server.consensus.ordering_service import OrderingService
 from plenum.server.node import Node
-from plenum.server.replica import Replica
 from plenum.test import waits
+from plenum.test.constants import BUY
 from plenum.test.msgs import randomMsg
 from plenum.test.spy_helpers import getLastClientReqReceivedForNode, getAllArgs, getAllReturnVals, \
     getAllMsgReceivedForNode
 from plenum.test.test_node import TestNode, TestReplica, \
-    getPrimaryReplica, getNonPrimaryReplicas, BUY
+    getPrimaryReplica, getNonPrimaryReplicas
 from stp_core.common.log import getlogger
 from stp_core.loop.eventually import eventuallyAll, eventually
 from stp_core.loop.looper import Looper
@@ -266,9 +271,6 @@ def addNodeBack(node_set,
                              config=tconf,
                              ha=node.nodestack.ha,
                              cliha=node.clientstack.ha)
-    for node in node_set:
-        if node.name != restartedNode.name:
-            node.nodestack.reconnectRemoteWithName(restartedNode.name)
     node_set.append(restartedNode)
     looper.add(restartedNode)
     return restartedNode
@@ -309,9 +311,8 @@ def check_request_is_not_returned_to_nodes(txnPoolNodeSet, request):
 
 
 def checkPrePrepareReqSent(replica: TestReplica, req: Request):
-    prePreparesSent = getAllArgs(replica, replica.sendPrePrepare)
-    expectedDigest = TestReplica.batchDigest([req])
-    assert expectedDigest in [p["ppReq"].digest for p in prePreparesSent]
+    prePreparesSent = getAllArgs(replica._ordering_service,
+                                 replica._ordering_service.send_pre_prepare)
     assert (req.digest,) in \
            [p["ppReq"].reqIdr for p in prePreparesSent]
 
@@ -319,15 +320,15 @@ def checkPrePrepareReqSent(replica: TestReplica, req: Request):
 def checkPrePrepareReqRecvd(replicas: Iterable[TestReplica],
                             expectedRequest: PrePrepare):
     for replica in replicas:
-        params = getAllArgs(replica, replica._can_process_pre_prepare)
+        params = getAllArgs(replica._ordering_service, replica._ordering_service._can_process_pre_prepare)
         assert expectedRequest.reqIdr in [p['pre_prepare'].reqIdr for p in params]
 
 
 def checkPrepareReqSent(replica: TestReplica, key: str,
                         view_no: int):
-    paramsList = getAllArgs(replica, replica.canPrepare)
-    rv = getAllReturnVals(replica,
-                          replica.canPrepare)
+    paramsList = getAllArgs(replica._ordering_service, replica._ordering_service._can_prepare)
+    rv = getAllReturnVals(replica._ordering_service,
+                          replica._ordering_service._can_prepare)
     args = [p["ppReq"].reqIdr for p in paramsList if p["ppReq"].viewNo == view_no]
     assert (key,) in args
     idx = args.index((key,))
@@ -337,16 +338,16 @@ def checkPrepareReqSent(replica: TestReplica, key: str,
 def checkSufficientPrepareReqRecvd(replica: TestReplica, viewNo: int,
                                    ppSeqNo: int):
     key = (viewNo, ppSeqNo)
-    assert key in replica.prepares
-    assert len(replica.prepares[key][1]) >= replica.quorums.prepare.value
+    assert key in replica._ordering_service.prepares
+    assert len(replica._ordering_service.prepares[key][1]) >= replica.quorums.prepare.value
 
 
 def checkSufficientCommitReqRecvd(replicas: Iterable[TestReplica], viewNo: int,
                                   ppSeqNo: int):
     for replica in replicas:
         key = (viewNo, ppSeqNo)
-        assert key in replica.commits
-        received = len(replica.commits[key][1])
+        assert key in replica._ordering_service.commits
+        received = len(replica._ordering_service.commits[key][1])
         minimum = replica.quorums.commit.value
         assert received > minimum
 
@@ -362,10 +363,10 @@ def checkViewNoForNodes(nodes: Iterable[TestNode], expectedViewNo: int = None):
 
     viewNos = set()
     for node in nodes:
-        logger.debug("{}'s view no is {}".format(node, node.viewNo))
-        viewNos.add(node.viewNo)
+        logger.debug("{}'s view no is {}".format(node, node.master_replica.viewNo))
+        viewNos.add(node.master_replica.viewNo)
     assert len(viewNos) == 1, 'Expected 1, but got {}. ' \
-                              'ViewNos: {}'.format(len(viewNos), [(n.name, n.viewNo) for n in nodes])
+                              'ViewNos: {}'.format(len(viewNos), [(n.name, n.master_replica.viewNo) for n in nodes])
     vNo, = viewNos
     if expectedViewNo is not None:
         assert vNo >= expectedViewNo, \
@@ -401,6 +402,18 @@ def checkDiscardMsg(processors, discardedMsg,
         exclude = []
     for p in filterNodeSet(processors, exclude):
         last = p.spylog.getLastParams(p.discard, required=False)
+        assert last
+        assert last['msg'] == discardedMsg
+        assert reasonRegexp in last['reason']
+
+
+def checkMasterReplicaDiscardMsg(processors, discardedMsg,
+                           reasonRegexp, *exclude):
+    if not exclude:
+        exclude = []
+    for p in filterNodeSet(processors, exclude):
+        stasher = p.master_replica.stasher
+        last = stasher.spylog.getLastParams(stasher.discard, required=False)
         assert last
         assert last['msg'] == discardedMsg
         assert reasonRegexp in last['reason']
@@ -478,6 +491,8 @@ def checkStateEquality(state1, state2):
 
 
 def check_seqno_db_equality(db1, db2):
+    if db1._keyValueStorage._db is None or db2._keyValueStorage._db is None:
+        return False
     assert db1.size == db2.size, \
         "{} != {}".format(db1.size, db2.size)
     assert {bytes(k): bytes(v) for k, v in db1._keyValueStorage.iterator()} == \
@@ -486,15 +501,16 @@ def check_seqno_db_equality(db1, db2):
 
 def check_primaries_equality(node1, node2):
     assert node1.primaries == node2.primaries, \
-        "{} != {}".format(node1.primaries, node2.primaries)
+        "{} != {}, Node1: {}; Node2: {}".format(node1.primaries, node2.primaries, node1, node2)
 
 
 def check_last_ordered_3pc(node1, node2):
     master_replica_1 = node1.master_replica
     master_replica_2 = node2.master_replica
     assert master_replica_1.last_ordered_3pc == master_replica_2.last_ordered_3pc, \
-        "{} != {}".format(master_replica_1.last_ordered_3pc,
-                          master_replica_2.last_ordered_3pc)
+        "{} != {} Node1: {}, Node2: {}".format(master_replica_1.last_ordered_3pc,
+                                               master_replica_2.last_ordered_3pc,
+                                               node1, node2)
     return master_replica_1.last_ordered_3pc
 
 
@@ -509,16 +525,16 @@ def check_last_ordered_3pc_backup(node1, node2):
 
 
 def check_view_no(node1, node2):
-    assert node1.viewNo == node2.viewNo, \
-        "{} != {}".format(node1.viewNo, node2.viewNo)
+    assert node1.master_replica.viewNo == node2.master_replica.viewNo, \
+        "{} != {}".format(node1.master_replica.viewNo, node2.master_replica.viewNo)
 
 
 def check_last_ordered_3pc_on_all_replicas(nodes, last_ordered_3pc):
     for n in nodes:
         for r in n.replicas.values():
             assert r.last_ordered_3pc == last_ordered_3pc, \
-                "{} != {}".format(r.last_ordered_3pc,
-                                  last_ordered_3pc)
+                "{} != {}, Replica: {}".format(r.last_ordered_3pc,
+                                               last_ordered_3pc, r)
 
 
 def check_last_ordered_3pc_on_master(nodes, last_ordered_3pc):
@@ -830,6 +846,18 @@ def sdk_multisign_request_object(looper, sdk_wallet, req):
     return looper.loop.run_until_complete(multi_sign_request(wh, did, req))
 
 
+def sdk_multisign_request_from_dict(looper, sdk_wallet, op, reqId=None, taa_acceptance=None, endorser=None):
+    wh, did = sdk_wallet
+    reqId = reqId or random.randint(10, 100000)
+    request = Request(operation=op, reqId=reqId,
+                      protocolVersion=CURRENT_PROTOCOL_VERSION, identifier=did,
+                      taaAcceptance=taa_acceptance,
+                      endorser=endorser)
+    req_str = json.dumps(request.as_dict)
+    resp = looper.loop.run_until_complete(multi_sign_request(wh, did, req_str))
+    return json.loads(resp)
+
+
 def sdk_signed_random_requests(looper, sdk_wallet, count):
     _, did = sdk_wallet
     reqs_obj = sdk_random_request_objects(count, identifier=did,
@@ -1062,12 +1090,13 @@ def sdk_send_batches_of_random(looper, txnPoolNodeSet, sdk_pool, sdk_wallet,
     return sdk_reqs
 
 
-def sdk_sign_request_from_dict(looper, sdk_wallet, op, reqId=None, taa_acceptance=None):
+def sdk_sign_request_from_dict(looper, sdk_wallet, op, reqId=None, taa_acceptance=None, endorser=None):
     wallet_h, did = sdk_wallet
     reqId = reqId or random.randint(10, 100000)
     request = Request(operation=op, reqId=reqId,
                       protocolVersion=CURRENT_PROTOCOL_VERSION, identifier=did,
-                      taaAcceptance=taa_acceptance)
+                      taaAcceptance=taa_acceptance,
+                      endorser=endorser)
     req_str = json.dumps(request.as_dict)
     resp = looper.loop.run_until_complete(sign_request(wallet_h, did, req_str))
     return json.loads(resp)
@@ -1125,25 +1154,17 @@ def perf_monitor_disabled(tconf):
 
 
 @contextmanager
-def view_change_timeout(tconf, vc_timeout, catchup_timeout=None, propose_timeout=None, ic_timeout=None):
-    old_catchup_timeout = tconf.MIN_TIMEOUT_CATCHUPS_DONE_DURING_VIEW_CHANGE
-    old_view_change_timeout = tconf.VIEW_CHANGE_TIMEOUT
+def view_change_timeout(tconf, vc_timeout, propose_timeout=None):
+    old_view_change_timeout = tconf.NEW_VIEW_TIMEOUT
     old_propose_timeout = tconf.INITIAL_PROPOSE_VIEW_CHANGE_TIMEOUT
     old_propagate_request_delay = tconf.PROPAGATE_REQUEST_DELAY
-    old_ic_timeout = tconf.INSTANCE_CHANGE_TIMEOUT
-    tconf.MIN_TIMEOUT_CATCHUPS_DONE_DURING_VIEW_CHANGE = \
-        0.6 * vc_timeout if catchup_timeout is None else catchup_timeout
-    tconf.VIEW_CHANGE_TIMEOUT = vc_timeout
+    tconf.NEW_VIEW_TIMEOUT = vc_timeout
     tconf.INITIAL_PROPOSE_VIEW_CHANGE_TIMEOUT = vc_timeout if propose_timeout is None else propose_timeout
     tconf.PROPAGATE_REQUEST_DELAY = 0
-    if ic_timeout is not None:
-        tconf.INSTANCE_CHANGE_TIMEOUT = ic_timeout
     yield tconf
-    tconf.MIN_TIMEOUT_CATCHUPS_DONE_DURING_VIEW_CHANGE = old_catchup_timeout
-    tconf.VIEW_CHANGE_TIMEOUT = old_view_change_timeout
+    tconf.NEW_VIEW_TIMEOUT = old_view_change_timeout
     tconf.INITIAL_PROPOSE_VIEW_CHANGE_TIMEOUT = old_propose_timeout
     tconf.PROPAGATE_REQUEST_DELAY = old_propagate_request_delay
-    tconf.INSTANCE_CHANGE_TIMEOUT = old_ic_timeout
 
 
 @contextmanager
@@ -1202,13 +1223,16 @@ def create_pre_prepare_params(state_root,
                               pp_seq_no=0,
                               inst_id=0,
                               audit_txn_root=None,
-                              reqs=None):
-    digest = Replica.batchDigest(reqs) if reqs is not None else "random digest"
-    req_idrs = [req.key for req in reqs] if reqs is not None else ["random request"]
+                              reqs=None,
+                              bls_multi_sigs=None):
+    if timestamp is None:
+        timestamp = get_utc_epoch()
+    req_idrs = [req.key for req in reqs] if reqs is not None else [random_string(32)]
+    digest = OrderingService.generate_pp_digest(req_idrs, view_no, timestamp)
     params = [inst_id,
               view_no,
               pp_seq_no,
-              timestamp or get_utc_epoch(),
+              timestamp,
               req_idrs,
               init_discarded(0),
               digest,
@@ -1220,7 +1244,13 @@ def create_pre_prepare_params(state_root,
               pool_state_root or generate_state_root(),
               audit_txn_root or generate_state_root()]
     if bls_multi_sig:
-        params.append(bls_multi_sig.as_list())
+        # Pass None for backward compatibility
+        params.append(None)
+        params.append([bls_multi_sig.as_list()])
+    elif bls_multi_sigs is not None:
+        # Pass None for backward compatibility
+        params.append(None)
+        params.append([sig.as_list() for sig in bls_multi_sigs])
     return params
 
 
@@ -1247,7 +1277,18 @@ def create_commit_no_bls_sig(req_key, inst_id=0):
 def create_commit_with_bls_sig(req_key, bls_sig):
     view_no, pp_seq_no = req_key
     params = create_commit_params(view_no, pp_seq_no)
-    params.append(bls_sig)
+    #  Use ' ' as BLS_SIG for backward-compatibility as BLS_SIG in COMMIT is optional but not Nullable
+    params.append(' ')
+    params.append({DOMAIN_LEDGER_ID: bls_sig})
+    return Commit(*params)
+
+
+def create_commit_with_bls_sigs(req_key, bls_sig, lid):
+    view_no, pp_seq_no = req_key
+    params = create_commit_params(view_no, pp_seq_no)
+    #  Use ' ' as BLS_SIG for backward-compatibility as BLS_SIG in COMMIT is optional but not Nullable
+    params.append(' ')
+    params.append({str(lid): bls_sig})
     return Commit(*params)
 
 
@@ -1279,6 +1320,11 @@ def create_prepare_from_pre_prepare(pre_prepare):
               pre_prepare.auditTxnRootHash]
     return Prepare(*params)
 
+def create_commit_from_pre_prepare(pre_prepare):
+    params = [pre_prepare.instId,
+              pre_prepare.viewNo,
+              pre_prepare.ppSeqNo]
+    return Commit(*params)
 
 def create_prepare(req_key, state_root, inst_id=0):
     view_no, pp_seq_no = req_key
@@ -1308,7 +1354,7 @@ def incoming_3pc_msgs_count(nodes_count: int = 4) -> int:
 
 
 def check_missing_pre_prepares(nodes, count):
-    assert all(count <= len(replica.prePreparesPendingPrevPP)
+    assert all(count <= len(replica._ordering_service.prePreparesPendingPrevPP)
                for replica in getNonPrimaryReplicas(nodes, instId=0))
 
 
@@ -1321,8 +1367,8 @@ class MockTimestamp:
 
 
 class MockTimer(QueueTimer):
-    def __init__(self, get_current_time: Optional[MockTimestamp] = None):
-        self._ts = get_current_time if get_current_time else MockTimestamp(0)
+    def __init__(self, start_time: int = 0):
+        self._ts = MockTimestamp(start_time)
         QueueTimer.__init__(self, self._ts)
 
     def set_time(self, value):
@@ -1330,6 +1376,7 @@ class MockTimer(QueueTimer):
         Update time and run scheduled callbacks afterwards
         """
         self._ts.value = value
+        self._log_time()
         self.service()
 
     def sleep(self, seconds):
@@ -1345,15 +1392,16 @@ class MockTimer(QueueTimer):
         if not self._events:
             return
 
-        event = self._events.pop(0)
+        event = self._pop_event()
         self._ts.value = event.timestamp
+        self._log_time()
         event.callback()
 
     def advance_until(self, value):
         """
         Advance time in steps until required value running scheduled callbacks in process
         """
-        while self._events and self._events[0].timestamp <= value:
+        while self._events and self._next_timestamp() <= value:
             self.advance()
         self._ts.value = value
 
@@ -1363,26 +1411,63 @@ class MockTimer(QueueTimer):
         """
         self.advance_until(self._ts.value + seconds)
 
-    def wait_for(self, condition: Callable[[], bool], timeout: Optional = None):
+    def wait_for(self, condition: Callable[[], bool], timeout: Optional = None, max_iterations: int = 10000):
         """
         Advance time in steps until condition is reached, running scheduled callbacks in process
         Throws TimeoutError if fail to reach condition (under required timeout if defined)
         """
+        counter = 0
         deadline = self._ts.value + timeout if timeout else None
-        while self._events and not condition():
-            if deadline and self._events[0].timestamp > deadline:
-                raise TimeoutError("Failed to reach condition in required time")
+        while self._events and not condition() and counter < max_iterations:
+            if deadline and self._next_timestamp() > deadline:
+                raise TimeoutError("Failed to reach condition in required time, {} iterations passed".format(counter))
             self.advance()
+            counter += 1
 
         if not condition():
-            raise TimeoutError("Condition will be never reached")
+            if not self._events:
+                raise TimeoutError("Condition will be never reached, {} iterations passed".format(counter))
+            else:
+                raise TimeoutError("Failed to reach condition in {} iterations".format(max_iterations))
 
-    def run_to_completion(self):
+    def run_to_completion(self, max_iterations: int = 10000):
         """
         Advance time in steps until nothing is scheduled
         """
-        while self._events:
+        counter = 0
+        while self._events and counter < max_iterations:
             self.advance()
+            counter += 1
+
+        if self._events:
+            raise TimeoutError("Failed to complete in {} iterations".format(max_iterations))
+
+    def _log_time(self):
+        # TODO: Probably better solution would be to replace real time in logs with virtual?
+        logger.info("Virtual time: {}".format(self._ts.value))
+
+
+class TestStopwatch:
+    def __init__(self, timer: Optional[TimerService] = None):
+        self._get_current_time = timer.get_current_time if timer else perf_counter
+        self._start_time = self._get_current_time()
+
+    def start(self):
+        self._start_time = self._get_current_time()
+
+    def has_elapsed(self, expected_delay: float, tolerance: float = 0.1) -> bool:
+        elapsed = self._get_current_time() - self._start_time
+        return abs(expected_delay - elapsed) <= expected_delay * tolerance
+
+
+class TestInternalBus(InternalBus):
+    def __init__(self):
+        super().__init__()
+        self.sent_messages = []
+
+    def send(self, message: Any, *args):
+        self.sent_messages.append(message)
+        super().send(message, *args)
 
 
 class MockNetwork(ExternalBus):
@@ -1392,3 +1477,98 @@ class MockNetwork(ExternalBus):
 
     def _send_message(self, msg: Any, dst: ExternalBus.Destination):
         self.sent_messages.append((msg, dst))
+
+    def connect(self, name: str):
+        self.update_connecteds(self.connecteds.union({name}))
+
+    def disconnect(self, name: str):
+        self.update_connecteds(self.connecteds.difference({name}))
+
+
+def get_handler_by_type_wm(write_manager, h_type):
+    for h_l in write_manager.request_handlers.values():
+        for h in h_l:
+            if isinstance(h, h_type):
+                return h
+
+
+def create_pool_txn_data(node_names: List[str],
+                         crypto_factory: BlsFactoryCrypto,
+                         get_free_port: Callable[[], int],
+                         nodes_with_bls: Optional[int] = None):
+    nodeCount = len(node_names)
+    data = {'txns': [], 'seeds': {}, 'nodesWithBls': {}}
+    for i, node_name in zip(range(1, nodeCount + 1), node_names):
+        data['seeds'][node_name] = node_name + '0' * (32 - len(node_name))
+        steward_name = 'Steward' + str(i)
+        data['seeds'][steward_name] = steward_name + '0' * (32 - len(steward_name))
+
+        n_idr = SimpleSigner(seed=data['seeds'][node_name].encode()).identifier
+        s_idr = DidSigner(seed=data['seeds'][steward_name].encode())
+
+        data['txns'].append(
+                Member.nym_txn(nym=s_idr.identifier,
+                               verkey=s_idr.verkey,
+                               role=STEWARD,
+                               name=steward_name,
+                               seq_no=i)
+        )
+
+        node_txn = Steward.node_txn(steward_nym=s_idr.identifier,
+                                    node_name=node_name,
+                                    nym=n_idr,
+                                    ip='127.0.0.1',
+                                    node_port=get_free_port(),
+                                    client_port=get_free_port(),
+                                    client_ip='127.0.0.1',
+                                    services=[VALIDATOR],
+                                    seq_no=i)
+
+        if nodes_with_bls is None or i <= nodes_with_bls:
+            _, bls_key, bls_key_proof = crypto_factory.generate_bls_keys(
+                seed=data['seeds'][node_name])
+            get_payload_data(node_txn)[DATA][BLS_KEY] = bls_key
+            get_payload_data(node_txn)[DATA][BLS_KEY_PROOF] = bls_key_proof
+            data['nodesWithBls'][node_name] = True
+
+        data['txns'].append(node_txn)
+
+    # Add 4 Trustees
+    for i in range(4):
+        trustee_name = 'Trs' + str(i)
+        data['seeds'][trustee_name] = trustee_name + '0' * (
+                32 - len(trustee_name))
+        t_sgnr = DidSigner(seed=data['seeds'][trustee_name].encode())
+        data['txns'].append(
+            Member.nym_txn(nym=t_sgnr.identifier,
+                           verkey=t_sgnr.verkey,
+                           role=TRUSTEE,
+                           name=trustee_name)
+        )
+
+    more_data_seeds = \
+        {
+            "Alice": "99999999999999999999999999999999",
+            "Jason": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "John": "dddddddddddddddddddddddddddddddd",
+            "Les": "ffffffffffffffffffffffffffffffff"
+        }
+    more_data_users = []
+    for more_name, more_seed in more_data_seeds.items():
+        signer = DidSigner(seed=more_seed.encode())
+        more_data_users.append(
+            Member.nym_txn(nym=signer.identifier,
+                           verkey=signer.verkey,
+                           name=more_name,
+                           creator="5rArie7XKukPCaEwq5XGQJnM9Fc5aZE3M9HAPVfMU2xC")
+        )
+
+    data['txns'].extend(more_data_users)
+    data['seeds'].update(more_data_seeds)
+    return data
+
+
+def get_pp_seq_no(nodes: list, inst_id=0) -> int:
+    los = set([n.replicas._replicas[inst_id].last_ordered_3pc[1] for n in nodes])
+    assert len(los) == 1
+    return los.pop()

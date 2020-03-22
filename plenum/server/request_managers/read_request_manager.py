@@ -1,5 +1,3 @@
-from typing import Dict
-
 from common.exceptions import LogicError
 from plenum.common.constants import TXN_TYPE
 from plenum.common.messages.node_messages import RequestNack
@@ -15,9 +13,6 @@ class ReadRequestManager(RequestManager):
         if handler is None:
             raise LogicError
         handler.static_validation(request)
-
-    def dynamic_validation(self, request: Request):
-        pass
 
     def register_req_handler(self, handler: ReadRequestHandler, ledger_id=None):
         if not isinstance(handler, ReadRequestHandler):

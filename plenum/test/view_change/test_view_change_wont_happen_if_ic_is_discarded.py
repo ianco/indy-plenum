@@ -3,6 +3,7 @@ import pytest as pytest
 from plenum.test.node_catchup.helper import ensure_all_nodes_have_same_data
 from plenum.test.test_node import ensureElectionsDone
 from plenum.test.view_change.helper import restart_node
+from plenum.test.view_change_service.helper import send_test_instance_change
 from stp_core.loop.eventually import eventually
 
 
@@ -30,24 +31,26 @@ def test_view_change_not_happen_if_ic_is_discarded(looper, txnPoolNodeSet,
     panic_node = txnPoolNodeSet[-1]
     view_no = txnPoolNodeSet[0].viewNo
 
-    panic_node.view_changer.on_master_degradation()
+    send_test_instance_change(panic_node)
     for n in nodes_to_restart:
         restart_node(looper, txnPoolNodeSet, n, tconf, tdir, allPluginsPath)
     nodes_to_restart = txnPoolNodeSet[1:3]
 
     # waiting to discard InstanceChange
     def check_old_ic_discarded():
-        assert all(not n.view_changer.instance_changes.has_inst_chng_from(view_no + 1, panic_node.name)
-                   for n in txnPoolNodeSet)
+        vct_services = [n.master_replica._view_change_trigger_service for n in txnPoolNodeSet]
+        assert all(not vct_service._instance_changes.has_inst_chng_from(view_no + 1, panic_node.name)
+                   for vct_service in vct_services)
 
     looper.run(eventually(check_old_ic_discarded, timeout=tconf.OUTDATED_INSTANCE_CHANGES_CHECK_INTERVAL + 1))
 
     for n in nodes_to_restart:
-        n.view_changer.on_master_degradation()
+        send_test_instance_change(n)
 
     def check_ic():
         for node in txnPoolNodeSet:
-            assert all(node.view_changer.instance_changes.has_inst_chng_from(view_no + 1, n.name)
+            vct_service = node.master_replica._view_change_trigger_service
+            assert all(vct_service._instance_changes.has_inst_chng_from(view_no + 1, n.name)
                        for n in nodes_to_restart)
 
     looper.run(eventually(check_ic))
