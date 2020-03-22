@@ -12,6 +12,7 @@ from .__metadata__ import (
 )
 
 import sys
+import pkg_resources
 
 if sys.version_info < (3, 5, 0):
     raise ImportError("Python 3.5.0 or later required.")
@@ -57,7 +58,7 @@ def setup_plugins():
                           format(plugin_root))
     sys.path.insert(0, plugin_root.__path__[0])
     enabled_plugins = config.ENABLED_PLUGINS
-    installed_packages = {p.project_name: p for p in pip.get_installed_distributions()}
+    installed_packages = {p.project_name: p for p in pkg_resources.working_set}
     for plugin_name in enabled_plugins:
         plugin = find_and_load_plugin(plugin_name, plugin_root, installed_packages)
         plugin_globals = plugin.__dict__
