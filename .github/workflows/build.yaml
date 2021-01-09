@@ -2,15 +2,42 @@ name: indy-plenum-build
 on: [ push, pull_request ]
 
 jobs:
-  indy_plenum:
-    name: Build Indy Plenum
+
+  indy_plenum_tests:
+    name: Indy Plenum Test Slices
     runs-on: ubuntu-18.04
     #TODO: move this to hyperledger?
     container: m00sey/indy-node-build:latest
     strategy:
       matrix:
-        module: [common, crypto, ledger, plenum, state, storage, stp_core, stp_zmq]
-        step: [1, 2, 3]
+        module: [plenum]
+        slice: [1, 2, 3]
+      fail-fast: false
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: pip install --ignore-installed .[tests]
+
+      - name: Run Indy Plenum ${{ matrix.module }} test slice ${{ matrix.slice }}/3
+        run: RUSTPYTHONASYNCIODEBUG=0 python runner.py --pytest "python -m pytest -l -vv" --dir "${{ matrix.module }}" --output "test-result-plenum-${{ matrix.slice }}.txt" --test-only-slice "${{ matrix.slice }}/3"
+
+      - name: Publish Test Report
+        uses: scacap/action-surefire-report@v1
+        with:
+          check_name: Indy Plenum ${{ matrix.module }} Test Report for slice ${{ matrix.slice }}/3
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: test-result-plenum-${{ matrix.slice }}.txt
+
+  indy_plenum:
+    name: Indy Plenum Tests
+    runs-on: ubuntu-18.04
+    #TODO: move this to hyperledger?
+    container: m00sey/indy-node-build:latest
+    strategy:
+      matrix:
+        module: [common, crypto, ledger, state, storage, stp_core, stp_zmq]
       fail-fast: false
     steps:
       - name: Check out code
@@ -20,12 +47,7 @@ jobs:
         run: pip install --ignore-installed .[tests]
 
       - name: Run Indy Plenum ${{ matrix.module }} tests
-        run: |
-          if [[ ${{ matrix.module }} == "plenum" ]]; then
-              RUSTPYTHONASYNCIODEBUG=0 python runner.py --pytest "python -m pytest -l -vv" --dir "${{ matrix.module }}" --output "test-result-plenum-${{ matrix.step }}.txt" --test-only-slice "${{ matrix.step }}/3"
-          else
-              python -m pytest -l -vv --junitxml=test-result-plenum-${{ matrix.module }}.xml ${{ matrix.module }}
-          fi
+        run: python -m pytest -l -vv --junitxml=test-result-plenum-${{ matrix.module }}.xml ${{ matrix.module }}
 
       - name: Publish Test Report
         uses: scacap/action-surefire-report@v1
