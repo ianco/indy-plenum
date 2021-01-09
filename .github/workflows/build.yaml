@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install dependencies
-        run: pip install --ignore-installed .[tests]
+        run: pip install .[tests]
 
       - name: Run Indy Plenum ${{ matrix.module }} test slice ${{ matrix.slice }}/3
         run: RUSTPYTHONASYNCIODEBUG=0 python runner.py --pytest "python -m pytest -l -vv" --dir "${{ matrix.module }}" --output "test-result-plenum-${{ matrix.slice }}.txt" --test-only-slice "${{ matrix.slice }}/3"
@@ -37,14 +37,14 @@ jobs:
     container: m00sey/indy-node-build:latest
     strategy:
       matrix:
-        module: [common, crypto, ledger, state, storage, stp_core, stp_zmq]
+        module: [common, crypto, ledger, plenum, state, storage, stp_core, stp_zmq]
       fail-fast: false
     steps:
       - name: Check out code
         uses: actions/checkout@v2
 
       - name: Install dependencies
-        run: pip install --ignore-installed .[tests]
+        run: pip install .[tests]
 
       - name: Run Indy Plenum ${{ matrix.module }} tests
         run: python -m pytest -l -vv --junitxml=test-result-plenum-${{ matrix.module }}.xml ${{ matrix.module }}
