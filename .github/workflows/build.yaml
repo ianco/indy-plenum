@@ -37,7 +37,7 @@ jobs:
     container: wwjbarnes/indy-plenum-ci:latest
     strategy:
       matrix:
-        module: [common, crypto, ledger, plenum, state, storage, stp_core, stp_zmq]
+        module: [common, crypto, ledger, state, storage, stp_core, stp_zmq]
       fail-fast: false
     steps:
       - name: Check out code
