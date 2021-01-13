@@ -1,6 +1,8 @@
 from collections import Counter
 from functools import partial
 
+import logging
+
 import pytest
 
 from plenum.common.messages.internal_messages import NeedViewChange
@@ -63,7 +65,7 @@ def test_view_change_permutations(random: SimRandom):
 
 # ToDo: this test fails on seeds {440868, 925547, 444939}
 def test_new_view_combinations(random: SimRandom):
-    print(">>> start test with:", random)
+    logging.error(">>> start test with: {}".format(random))
 
     # Create pool in some random initial state
     pool, _ = some_pool(random)
@@ -79,11 +81,11 @@ def test_new_view_combinations(random: SimRandom):
 
     # Check that all committed requests are present in final batches
     for i in range(10):
-        print(">>> check in loop:", i)
+        logging.error(">>> check in loop: {}".format(i))
         num_votes = quorums.strong.value
-        print(">>> ... with num_votes:", num_votes)
+        logging.error(">>> ... with num_votes: {}".format(num_votes))
         votes = random.sample(view_change_messages, num_votes)
-        print(">>> ... with votes:", votes)
+        logging.error(">>> ... with votes: {}".format(votes))
 
         cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
         assert cp is not None
