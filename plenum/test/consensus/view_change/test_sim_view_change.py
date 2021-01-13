@@ -87,7 +87,12 @@ def test_new_view_combinations(random: SimRandom):
         votes = random.sample(view_change_messages, num_votes)
         logging.error(">>> ... with votes: {}".format(votes))
 
-        cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
+        cp = None
+        j = 3
+        while j > 0 and not cp:
+            logging.error(">>> calc_checkpoint {}".format(j))
+            cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
+            j = j - 1
         assert cp is not None
 
         batches = pool.nodes[0]._view_changer._new_view_builder.calc_batches(cp, votes)
