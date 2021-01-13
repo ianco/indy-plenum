@@ -69,6 +69,7 @@ from plenum.common.config_helper import PConfigHelper, PNodeConfigHelper
 
 Logger.setLogLevel(logging.ERROR)
 logging.getLogger("indy").setLevel(logging.ERROR)
+logging.getLogger("plenum").setLevel(logging.ERROR)
 logger = getlogger()
 
 GENERAL_CONFIG_DIR = 'etc/indy'

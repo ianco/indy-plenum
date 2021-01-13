@@ -34,6 +34,7 @@ from plenum.test.testing_utils import FakeSomething
 
 Logger.setLogLevel(logging.ERROR)
 logging.getLogger("indy").setLevel(logging.ERROR)
+logging.getLogger("plenum").setLevel(logging.ERROR)
 logger = getlogger()
 
 
