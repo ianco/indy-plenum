@@ -227,7 +227,7 @@ logRotationMaxBytes = 100 * 1024 * 1024
 logRotationCompression = "xz"
 logFormat = '{asctime:s}|{levelname:s}|{filename:s}|{message:s}'
 logFormatStyle = '{'
-logLevel = logging.NOTSET
+logLevel = logging.ERROR
 enableStdOutLogging = True
 
 # OPTIONS RELATED TO TESTS
