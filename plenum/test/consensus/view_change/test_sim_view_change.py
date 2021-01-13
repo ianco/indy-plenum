@@ -63,6 +63,8 @@ def test_view_change_permutations(random: SimRandom):
 
 # ToDo: this test fails on seeds {440868, 925547, 444939}
 def test_new_view_combinations(random: SimRandom):
+    print(">>> start test with:", random)
+
     # Create pool in some random initial state
     pool, _ = some_pool(random)
     quorums = pool.nodes[0]._data.quorums
@@ -76,9 +78,12 @@ def test_new_view_combinations(random: SimRandom):
         view_change_messages.append(network.sent_messages[0][0])
 
     # Check that all committed requests are present in final batches
-    for _ in range(10):
+    for i in range(10):
+        print(">>> check in loop:", i)
         num_votes = quorums.strong.value
+        print(">>> ... with num_votes:", num_votes)
         votes = random.sample(view_change_messages, num_votes)
+        print(">>> ... with votes:", votes)
 
         cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
         assert cp is not None
