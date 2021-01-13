@@ -68,7 +68,7 @@ from plenum.test.test_node import TestNode, Pool, \
 from plenum.common.config_helper import PConfigHelper, PNodeConfigHelper
 
 Logger.setLogLevel(logging.INFO)
-logging.getLogger("indy").setLevel(logging.WARNING)
+logging.getLogger("indy").setLevel(logging.ERROR)
 logger = getlogger()
 
 GENERAL_CONFIG_DIR = 'etc/indy'
