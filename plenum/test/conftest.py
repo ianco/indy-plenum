@@ -67,7 +67,7 @@ from plenum.test.test_node import TestNode, Pool, \
     getNonPrimaryReplicas, TestNodeBootstrap
 from plenum.common.config_helper import PConfigHelper, PNodeConfigHelper
 
-Logger.setLogLevel(logging.INFO)
+Logger.setLogLevel(logging.ERROR)
 logging.getLogger("indy").setLevel(logging.ERROR)
 logger = getlogger()
 

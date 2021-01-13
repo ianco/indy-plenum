@@ -1,6 +1,8 @@
 from functools import partial
 from random import Random
 
+from stp_core.common.log import getlogger, Logger
+
 import pytest
 
 from plenum.bls.bls_crypto_factory import create_default_bls_crypto_factory
@@ -27,6 +29,11 @@ from plenum.test.greek import genNodeNames
 from plenum.test.helper import MockTimer, MockNetwork, create_pool_txn_data, TestInternalBus
 from plenum.test.simulation.sim_random import DefaultSimRandom
 from plenum.test.testing_utils import FakeSomething
+
+
+Logger.setLogLevel(logging.ERROR)
+logging.getLogger("indy").setLevel(logging.ERROR)
+logger = getlogger()
 
 
 @pytest.fixture(params=[4, 6, 7], ids=['4nodes', '6nodes', '7nodes'])
