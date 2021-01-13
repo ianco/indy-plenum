@@ -81,18 +81,20 @@ def test_new_view_combinations(random: SimRandom):
 
     # Check that all committed requests are present in final batches
     for i in range(10):
-        logging.error(">>> check in loop: {}".format(i))
-        num_votes = quorums.strong.value
-        logging.error(">>> ... with num_votes: {}".format(num_votes))
-        votes = random.sample(view_change_messages, num_votes)
-        logging.error(">>> ... with votes: {}".format(votes))
-
         cp = None
-        j = 3
-        while j > 0 and not cp:
+        j = 0
+        while j < 3 and not cp:
+            logging.error(">>> check in loop: {} {}".format(i, j))
+            num_votes = quorums.strong.value
+            logging.error(">>> ... with num_votes: {}".format(num_votes))
+            votes = random.sample(view_change_messages, num_votes)
+            logging.error(">>> ... with votes: {}".format(votes))
+
             logging.error(">>> calc_checkpoint {}".format(j))
             cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
-            j = j - 1
+            if not cp:
+                logging.error(">>> cp is None")
+            j = j + 1
         assert cp is not None
 
         batches = pool.nodes[0]._view_changer._new_view_builder.calc_batches(cp, votes)
