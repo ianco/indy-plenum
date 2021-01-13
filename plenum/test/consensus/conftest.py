@@ -1,6 +1,7 @@
 from functools import partial
 from random import Random
 
+import logging
 from stp_core.common.log import getlogger, Logger
 
 import pytest
