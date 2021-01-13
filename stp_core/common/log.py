@@ -9,7 +9,7 @@ from stp_core.common.logging.handlers import CliHandler
 from stp_core.common.config.util import getConfig
 
 TRACE_LOG_LEVEL = 5
-DISPLAY_LOG_LEVEL = 40 # python ERROR level
+DISPLAY_LOG_LEVEL = 25
 
 # TODO: move it to plenum-utils
 
@@ -45,8 +45,7 @@ class Logger(metaclass=Singleton):
 
     @staticmethod
     def setLogLevel(log_level):
-        #logging.root.setLevel(log_level)
-        logging.root.setLevel(DISPLAY_LOG_LEVEL)
+        logging.root.setLevel(log_level)
 
     def apply_config(self, config):
         if not config:
