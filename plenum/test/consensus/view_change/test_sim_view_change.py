@@ -1,6 +1,7 @@
 from collections import Counter
 from functools import partial
 
+import time
 import logging
 
 import pytest
@@ -88,7 +89,7 @@ def test_new_view_combinations(random: SimRandom):
     for i in range(10):
         cp = None
         j = 0
-        while j < 3 and not cp:
+        while j < 5 and not cp:
             logging.error(">>> check in loop: {} {}".format(i, j))
             num_votes = quorums.strong.value
             logging.error(">>> ... with num_votes: {}".format(num_votes))
@@ -101,6 +102,7 @@ def test_new_view_combinations(random: SimRandom):
                 logging.error(">>> found a cp!")
             else:
                 logging.error(">>> cp is None")
+                time.sleep(0.5)
             j = j + 1
         assert cp is not None
         if j > 1:
