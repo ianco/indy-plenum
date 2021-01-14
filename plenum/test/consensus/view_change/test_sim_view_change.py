@@ -103,15 +103,15 @@ def test_new_view_combinations(random: SimRandom):
             j = j + 1
         assert cp is not None
 
-        logger.error(">>> get batches ...")
+        logging.error(">>> get batches ...")
         batches = pool.nodes[0]._view_changer._new_view_builder.calc_batches(cp, votes)
-        logger.error(">>> calc and check committed votes ...")
+        logging.error(">>> calc and check committed votes ...")
         committed = calc_committed(votes)
         committed = [c for c in committed if c.pp_seq_no > cp.seqNoEnd]
 
         assert batches is not None
         assert committed == batches[:len(committed)]
-        logger.error(">>> everything ok for loop: {} {}".format(i, j))
+        logging.error(">>> everything ok for loop: {}".format(i))
 
 
 def check_view_change_completes_under_normal_conditions(random: SimRandom,
