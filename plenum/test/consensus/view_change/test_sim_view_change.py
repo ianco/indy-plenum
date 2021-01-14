@@ -84,10 +84,10 @@ def test_new_view_combinations(random: SimRandom):
     logging.error(">>> view_change_messages: {}".format(view_change_messages))
 
     # Check that all committed requests are present in final batches
+    retry_multiple_times = False
     for i in range(10):
         cp = None
         j = 0
-        retry_multiple_times = False
         while j < 3 and not cp:
             logging.error(">>> check in loop: {} {}".format(i, j))
             num_votes = quorums.strong.value
@@ -115,7 +115,8 @@ def test_new_view_combinations(random: SimRandom):
         assert batches is not None
         assert committed == batches[:len(committed)]
         logging.error(">>> everything ok for loop: {}".format(i))
-        assert retry_multiple_times == False
+
+    assert retry_multiple_times == False
 
 
 def check_view_change_completes_under_normal_conditions(random: SimRandom,
