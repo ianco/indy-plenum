@@ -86,6 +86,7 @@ def test_new_view_combinations(random: SimRandom):
 
     # Check that all committed requests are present in final batches
     retry_multiple_times = False
+    max_retry_times = 0
     cp_not_found = False
     for i in range(10):
         cp = None
@@ -111,6 +112,8 @@ def test_new_view_combinations(random: SimRandom):
 
         if j > 1:
             retry_multiple_times = True
+            if j > max_retry_times:
+                max_retry_times = j
 
         if cp:
             logging.error(">>> get batches ...")
@@ -124,7 +127,7 @@ def test_new_view_combinations(random: SimRandom):
             logging.error(">>> everything ok for loop: {} {}".format(i, j))
 
     if retry_multiple_times:
-        logging.error("Error retry_multiple_times")
+        logging.error("Error retry_multiple_times: {}", max_retry_times)
     if cp_not_found:
         logging.error("Error cp_not_found")
     assert retry_multiple_times == False
