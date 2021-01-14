@@ -121,7 +121,7 @@ def test_new_view_combinations(random: SimRandom):
 
             assert batches is not None
             assert committed == batches[:len(committed)]
-            logging.error(">>> everything ok for loop: {}".format(i))
+            logging.error(">>> everything ok for loop: {} {}".format(i, j))
 
     if retry_multiple_times:
         logging.error("Error retry_multiple_times")
