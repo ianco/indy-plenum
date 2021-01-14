@@ -87,6 +87,7 @@ def test_new_view_combinations(random: SimRandom):
     for i in range(10):
         cp = None
         j = 0
+        retry_multiple_times = False
         while j < 3 and not cp:
             logging.error(">>> check in loop: {} {}".format(i, j))
             num_votes = quorums.strong.value
@@ -102,6 +103,8 @@ def test_new_view_combinations(random: SimRandom):
                 logging.error(">>> cp is None")
             j = j + 1
         assert cp is not None
+        if j > 1:
+            retry_multiple_times = True
 
         logging.error(">>> get batches ...")
         batches = pool.nodes[0]._view_changer._new_view_builder.calc_batches(cp, votes)
@@ -112,6 +115,7 @@ def test_new_view_combinations(random: SimRandom):
         assert batches is not None
         assert committed == batches[:len(committed)]
         logging.error(">>> everything ok for loop: {}".format(i))
+        assert retry_multiple_times == False
 
 
 def check_view_change_completes_under_normal_conditions(random: SimRandom,
