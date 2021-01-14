@@ -82,7 +82,7 @@ def test_new_view_combinations(random: SimRandom):
         node._view_changer._bus.send(NeedViewChange())
         view_change_messages.append(network.sent_messages[0][0])
         logging.error("   >>> got view change for node")
-    logging.error(">>> view_change_messages: {}".format(view_change_messages))
+    #logging.error(">>> view_change_messages: {}".format(view_change_messages))
 
     # Check that all committed requests are present in final batches
     retry_multiple_times = False
