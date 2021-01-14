@@ -72,12 +72,15 @@ def test_new_view_combinations(random: SimRandom):
     quorums = pool.nodes[0]._data.quorums
 
     # Get view change votes from all nodes
+    logging.error(">>> send view changes ...")
     view_change_messages = []
     for node in pool.nodes:
+        logging.error("   >>> send view change for node ...")
         network = MockNetwork()
         node._view_changer._network = network
         node._view_changer._bus.send(NeedViewChange())
         view_change_messages.append(network.sent_messages[0][0])
+        logging.error("   >>> got view change for node")
     logging.error(">>> view_change_messages: {}".format(view_change_messages))
 
     # Check that all committed requests are present in final batches
@@ -93,17 +96,22 @@ def test_new_view_combinations(random: SimRandom):
 
             logging.error(">>> calc_checkpoint {}".format(j))
             cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
-            if not cp:
+            if cp:
+                logging.error(">>> found a cp!")
+            else:
                 logging.error(">>> cp is None")
             j = j + 1
         assert cp is not None
 
+        logger.error(">>> get batches ...")
         batches = pool.nodes[0]._view_changer._new_view_builder.calc_batches(cp, votes)
+        logger.error(">>> calc and check committed votes ...")
         committed = calc_committed(votes)
         committed = [c for c in committed if c.pp_seq_no > cp.seqNoEnd]
 
         assert batches is not None
         assert committed == batches[:len(committed)]
+        logger.error(">>> everything ok for loop: {} {}".format(i, j))
 
 
 def check_view_change_completes_under_normal_conditions(random: SimRandom,
