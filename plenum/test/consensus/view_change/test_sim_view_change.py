@@ -95,7 +95,7 @@ def test_new_view_combinations(random: SimRandom):
             num_votes = quorums.strong.value
             logging.error(">>> ... with num_votes: {}".format(num_votes))
             votes = random.sample(view_change_messages, num_votes)
-            logging.error(">>> ... with votes: {}".format(votes))
+            #logging.error(">>> ... with votes: {}".format(votes))
 
             logging.error(">>> calc_checkpoint {}".format(j))
             cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
