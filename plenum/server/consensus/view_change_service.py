@@ -362,16 +362,19 @@ class NewViewBuilder:
 
     def calc_checkpoint(self, vcs: List[ViewChange]) -> Optional[Checkpoint]:
         checkpoints = []
+        logger.error("   >>> find valid checkpoints ...")
         for cur_vc in vcs:
             for cur_cp in cur_vc.checkpoints:
                 # Don't add checkpoint to pretending ones if it is already there
                 if cur_cp in checkpoints:
+                    logger.error("   >>> cp is already in checkpoints")
                     continue
 
                 # Don't add checkpoint to pretending ones if too many nodes already stabilized it
                 # TODO: Should we take into account view_no as well?
                 stable_checkpoint_not_higher = [vc for vc in vcs if cur_cp.seqNoEnd >= vc.stableCheckpoint]
                 if not self._data.quorums.strong.is_reached(len(stable_checkpoint_not_higher)):
+                    logger.error("   >>> cp not strong.is_reached({})".format(len(stable_checkpoint_not_higher)))
                     continue
 
                 # Don't add checkpoint to pretending ones if not enough nodes have it
@@ -382,16 +385,23 @@ class NewViewBuilder:
                 # Once https://jira.hyperledger.org/browse/INDY-2237 is done, we may come back to weak certificate here
                 have_checkpoint = [vc for vc in vcs if cur_cp in vc.checkpoints]
                 if not self._data.quorums.strong.is_reached(len(have_checkpoint)):
+                    logger.error("   >>> cp not enough nodes have it({})".format(len(have_checkpoint)))
                     continue
 
                 # All checks passed, this is a valid candidate checkpoint
+                logger.error("   >>> adding candidate checkpoint")
                 checkpoints.append(cur_cp)
 
         highest_cp = None
+        logger.error("   >>> find highest_cp ...")
+        i = 0
         for cp in checkpoints:
+            logger.error("   >>> check cp {} {}".format(i, cp.seqNoEnd))
             # TODO: Should we take into account view_no as well?
             if highest_cp is None or cp.seqNoEnd > highest_cp.seqNoEnd:
+                logger.error("   >>> set new highest cp {}".format(cp))
                 highest_cp = cp
+            i = i + 1
 
         return highest_cp
 
