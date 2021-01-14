@@ -86,10 +86,11 @@ def test_new_view_combinations(random: SimRandom):
 
     # Check that all committed requests are present in final batches
     retry_multiple_times = False
+    cp_not_found = False
     for i in range(10):
         cp = None
         j = 0
-        while j < 5 and not cp:
+        while j < 10 and not cp:
             logging.error(">>> check in loop: {} {}".format(i, j))
             num_votes = quorums.strong.value
             logging.error(">>> ... with num_votes: {}".format(num_votes))
@@ -104,21 +105,30 @@ def test_new_view_combinations(random: SimRandom):
                 logging.error(">>> cp is None")
                 time.sleep(0.5)
             j = j + 1
-        assert cp is not None
+
+        if not cp:
+            cp_not_found = True
+
         if j > 1:
             retry_multiple_times = True
 
-        logging.error(">>> get batches ...")
-        batches = pool.nodes[0]._view_changer._new_view_builder.calc_batches(cp, votes)
-        logging.error(">>> calc and check committed votes ...")
-        committed = calc_committed(votes)
-        committed = [c for c in committed if c.pp_seq_no > cp.seqNoEnd]
+        if cp:
+            logging.error(">>> get batches ...")
+            batches = pool.nodes[0]._view_changer._new_view_builder.calc_batches(cp, votes)
+            logging.error(">>> calc and check committed votes ...")
+            committed = calc_committed(votes)
+            committed = [c for c in committed if c.pp_seq_no > cp.seqNoEnd]
 
-        assert batches is not None
-        assert committed == batches[:len(committed)]
-        logging.error(">>> everything ok for loop: {}".format(i))
+            assert batches is not None
+            assert committed == batches[:len(committed)]
+            logging.error(">>> everything ok for loop: {}".format(i))
 
+    if retry_multiple_times:
+        logging.error("Error retry_multiple_times")
+    if cp_not_found:
+        logging.error("Error cp_not_found")
     assert retry_multiple_times == False
+    assert cp_not_found == False
 
 
 def check_view_change_completes_under_normal_conditions(random: SimRandom,
