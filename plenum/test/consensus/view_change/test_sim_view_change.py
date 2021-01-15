@@ -82,7 +82,7 @@ def test_new_view_combinations(random: SimRandom):
         node._view_changer._bus.send(NeedViewChange())
         view_change_messages.append(network.sent_messages[0][0])
         logging.error("   >>> got view change for node")
-    #logging.error(">>> view_change_messages: {}".format(view_change_messages))
+    # logging.error(">>> view_change_messages: {}".format(view_change_messages))
 
     # Check that all committed requests are present in final batches
     retry_multiple_times = False
@@ -96,7 +96,7 @@ def test_new_view_combinations(random: SimRandom):
             num_votes = quorums.strong.value
             logging.error(">>> ... with num_votes: {}".format(num_votes))
             votes = random.sample(view_change_messages, num_votes)
-            #logging.error(">>> ... with votes: {}".format(votes))
+            # logging.error(">>> ... with votes: {}".format(votes))
 
             logging.error(">>> calc_checkpoint {}".format(j))
             cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
@@ -130,7 +130,7 @@ def test_new_view_combinations(random: SimRandom):
         logging.error("Error retry_multiple_times: {}".format(max_retry_times))
     if cp_not_found:
         logging.error("Error cp_not_found")
-    #assert retry_multiple_times == False
+    # assert retry_multiple_times == False
     assert cp_not_found == False
 
 
