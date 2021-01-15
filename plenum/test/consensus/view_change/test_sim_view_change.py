@@ -91,7 +91,7 @@ def test_new_view_combinations(random: SimRandom):
     for i in range(10):
         cp = None
         j = 0
-        while j < 10 and not cp:
+        while j < 20 and not cp:
             logging.error(">>> check in loop: {} {}".format(i, j))
             num_votes = quorums.strong.value
             logging.error(">>> ... with num_votes: {}".format(num_votes))
