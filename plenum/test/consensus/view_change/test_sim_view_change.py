@@ -127,9 +127,9 @@ def test_new_view_combinations(random: SimRandom):
             logging.error(">>> everything ok for loop: {} {}".format(i, j))
 
     if retry_multiple_times:
-        logging.error("Error retry_multiple_times: {}".format(max_retry_times))
+        logging.error("Error retry_multiple_times: {} for seed: {}".format(max_retry_times, random))
     if cp_not_found:
-        logging.error("Error cp_not_found")
+        logging.error("Error cp_not_found for seed {}".format(random))
     assert retry_multiple_times == False
     assert cp_not_found == False
 
