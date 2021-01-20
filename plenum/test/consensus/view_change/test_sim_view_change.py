@@ -89,15 +89,15 @@ def test_new_view_combinations(random: SimRandom):
     max_retry_times = 0
     cp_not_found = False
     for i in range(10):
+        num_votes = quorums.strong.value
+        logging.error(">>> ... with num_votes: {}".format(num_votes))
+        votes = random.sample(view_change_messages, num_votes)
+        # logging.error(">>> ... with votes: {}".format(votes))
+
         cp = None
         j = 0
         while j < 20 and not cp:
             logging.error(">>> check in loop: {} {}".format(i, j))
-            num_votes = quorums.strong.value
-            logging.error(">>> ... with num_votes: {}".format(num_votes))
-            votes = random.sample(view_change_messages, num_votes)
-            # logging.error(">>> ... with votes: {}".format(votes))
-
             logging.error(">>> calc_checkpoint {}".format(j))
             cp = pool.nodes[0]._view_changer._new_view_builder.calc_checkpoint(votes)
             if cp:
