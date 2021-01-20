@@ -12,6 +12,8 @@ from functools import partial
 import time
 from typing import Dict, Any, List
 
+from pathlib import Path
+
 from indy.pool import create_pool_ledger_config, open_pool_ledger, close_pool_ledger
 from indy.wallet import create_wallet, open_wallet, close_wallet
 from indy.did import create_and_store_my_did
