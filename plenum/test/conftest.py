@@ -332,9 +332,11 @@ def node_config_helper_class():
 
 
 def _tdir(tdir_fact):
-    print(tdir_fact.getbasetemp())
-    print(os.path.normpath(''))
-    return tdir_fact.mktemp('').strpath
+    basename = ''
+    print("basetmp:", tdir_fact.getbasetemp())
+    print("basepath:", os.path.normpath(basename))
+    print("parent:", (tdir_fact.getbasetemp() / basename).resolve().parent)
+    return tdir_fact.mktemp(basename).strpath
 
 
 @pytest.fixture(scope='module')
