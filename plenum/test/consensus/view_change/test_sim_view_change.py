@@ -130,7 +130,7 @@ def test_new_view_combinations(random: SimRandom):
         logging.error("Error retry_multiple_times: {}".format(max_retry_times))
     if cp_not_found:
         logging.error("Error cp_not_found")
-    # assert retry_multiple_times == False
+    assert retry_multiple_times == False
     assert cp_not_found == False
 
 
