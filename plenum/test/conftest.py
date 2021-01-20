@@ -332,7 +332,7 @@ def node_config_helper_class():
 
 
 def _tdir(tdir_fact):
-    return tdir_fact.mktemp('').strpath
+    return tdir_fact.mktemp('/tmp/').strpath
 
 
 @pytest.fixture(scope='module')
