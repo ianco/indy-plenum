@@ -432,7 +432,7 @@ def ensureView(txnPoolNodeSet, looper):
     return waitForViewChange(looper, txnPoolNodeSet)
 
 
-@pytest.fixture("module")
+@pytest.fixture(scope="module")
 def delayed_perf_chk(txnPoolNodeSet):
     d = 20
     for node in txnPoolNodeSet:
