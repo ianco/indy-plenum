@@ -335,7 +335,7 @@ def _tdir(tdir_fact):
     basename = ''
     print("basetmp:", tdir_fact.getbasetemp())
     print("basepath:", os.path.normpath(basename))
-    print("parent:", (tdir_fact.getbasetemp() / os.path.normpath(basename)).resolve().parent)
+    print("parent:", (Path(tdir_fact.getbasetemp()) / Path(os.path.normpath(basename))).resolve().parent)
     return tdir_fact.mktemp(basename).strpath
 
 
