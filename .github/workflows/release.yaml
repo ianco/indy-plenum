@@ -19,7 +19,7 @@ jobs:
         run: ./build-scripts/ubuntu-1604/install-os-tools.sh
 
       - name: Build Indy Plenum deployment package
-        run: ./build-scripts/ubuntu-1604/build-indy-plenum.sh /home/indy/indy-plenum 1.14.0 /home/indy/indy-plenum/build-scripts/ubuntu-1604
+        run: ./build-scripts/ubuntu-1604/build-indy-plenum.sh /home/indy/indy-plenum 1.14.0 /tmp
 
       - name: Build 3rd party deployment packages
         run: ./build-scripts/ubuntu-1604/build-3rd-parties.sh
