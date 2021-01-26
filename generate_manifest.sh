@@ -9,7 +9,7 @@ if [ "$1" = "--help" ] ; then
   exit 0
 fi
 
-repourl=$(git config --get remote.origin.url)
+repourl="https://github.com/hyperledger/indy-plenum.git"
 hashcommit=$(git $repo rev-parse HEAD)
 
 python3 -c "import plenum; plenum.set_manifest({'repo': '$repourl', 'sha1': '$hashcommit', 'version': plenum.__version__})"
