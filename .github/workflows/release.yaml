@@ -9,11 +9,8 @@ jobs:
     #TODO: move this to hyperledger?
     container: wwjbarnes/indy-plenum-ci:latest
     steps:
-      - name: Upgrade git before checkout
-        run: ./build-scripts/ubuntu-1604/upgrade-git.sh
-
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v1
 
       - name: Install os dependencies
         run: ./build-scripts/ubuntu-1604/install-os-dependencies.sh
