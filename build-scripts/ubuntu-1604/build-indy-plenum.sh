@@ -12,6 +12,7 @@ echo ${INPUT_PATH}
 
 # copy the sources to a temporary folder
 TMP_DIR=$(mktemp -d)
+shopt -s dotglob
 cp -r ${INPUT_PATH}/. ${TMP_DIR}
 
 # prepare the sources
