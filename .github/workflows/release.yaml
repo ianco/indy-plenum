@@ -1,0 +1,25 @@
+name: indy-plenum-release
+on: [ push, pull_request, workflow_dispatch ]
+
+jobs:
+
+  indy_plenum_release:
+    name: Indy Plenum Release
+    runs-on: ubuntu-18.04
+    #TODO: move this to hyperledger?
+    container: wwjbarnes/indy-plenum-ci:latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Install os dependencies
+        run: ./build-scripts/ubuntu-1604/install-os-dependencies.sh
+
+      - name: Install os tools
+        run: ./build-scripts/ubuntu-1604/install-os-tools.sh
+
+      - name: Build Indy Plenum deployment package
+        run: ./build-scripts/ubuntu-1604/build-indy-plenum.sh /home/indy/indy-plenum 1.14.0 /home/indy/indy-plenum/build-scripts/ubuntu-1604
+
+      - name: Build 3rd party deployment packages
+        run: ./build-scripts/ubuntu-1604/build-3rd-parties.sh
