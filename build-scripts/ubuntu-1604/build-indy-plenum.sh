@@ -14,6 +14,10 @@ echo ${INPUT_PATH}
 TMP_DIR=$(mktemp -d)
 shopt -s dotglob
 cp -r ${INPUT_PATH}/. ${TMP_DIR}
+echo ${INPUT_PATH}
+ls -la ${INPUT_PATH}
+echo ${TMP_DIR}
+ls -la ${TMP_DIR}
 
 # prepare the sources
 cd ${TMP_DIR}/build-scripts/ubuntu-1604
