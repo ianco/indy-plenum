@@ -7,6 +7,9 @@ PACKAGE_VERSION=${4:-$VERSION}
 
 PACKAGE_NAME=indy-plenum
 
+echo ${PWD}
+echo ${INPUT_PATH}
+
 # copy the sources to a temporary folder
 TMP_DIR=$(mktemp -d)
 cp -r ${INPUT_PATH}/. ${TMP_DIR}
